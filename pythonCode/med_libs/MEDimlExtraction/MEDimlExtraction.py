@@ -19,6 +19,10 @@ from .utils import *
 # Global variables
 UPLOAD_FOLDER = Path(os.path.dirname(os.path.abspath(__file__)))  / "tmp"
 
+# Mirrors MEDiml.biomarkers.BatchExtractor.DEFAULT_ROI_TYPE: the roi type MEDiml uses to name
+# the saved features when none is defined in the extraction settings file.
+DEFAULT_ROI_TYPE = 'all'
+
 class ExtractionWorkflow:
     """
     Class to represent the extraction workflow of the MEDiml application as a list of pipelines.
@@ -574,7 +578,11 @@ class MEDimlExtraction:
         # Required paths
         path_data = Path(data.get("pathData", None))
         path_save = Path(data.get("pathSave", None))
-        path_csv = Path(data.get("pathCSV", None))
+
+        # The ROI CSV file is optional. Without it, all the scans matching the wildcards are
+        # analyzed, using the union of all the ROIs of each scan.
+        path_csv = data.get("pathCSV", None)
+        path_csv = Path(path_csv) if path_csv else None
         n_batch = data.get("nBatch", 4)
         wildcards_dimensions = data.get("wildcards_dimensions", None)
         wildcards_window = data.get("wildcards_window", None)
@@ -657,6 +665,59 @@ class MEDimlExtraction:
 
         return {"success": "Settings saved successfully."}
 
+    @staticmethod
+    def count_scans_in_path(path_read: Path, use_format: str) -> int:
+        """
+        Count the scans available in the read path, used when no ROI CSV file is given.
+
+        The scans are identified the same way the BatchExtractor identifies them, so that the
+        count matches the number of scans that will actually be processed.
+
+        Args:
+            path_read (Path): Path to the folder holding the dataset.
+            use_format (str): Format of the dataset, one of "npy", "nifti" or "dicom".
+
+        Returns:
+            int: The number of scans found.
+        """
+        scans = set()
+
+        if use_format == "nifti":
+            from MEDiml.utils.parse_nifti_name import is_nifti_file, is_roi_file, parse_nifti_name
+            for file in path_read.rglob('*.nii*'):
+                if not is_nifti_file(file) or is_roi_file(file):
+                    # The ROI masks are associated to their scan when it gets loaded.
+                    continue
+                patient_id, sequence, _, modality = parse_nifti_name(file)
+                if not (patient_id and sequence and modality):
+                    continue
+                # The same scan is duplicated once per ROI, so it must be de-duplicated.
+                scans.add((patient_id, sequence, modality))
+
+        elif use_format == "dicom":
+            # The DICOM datasets are organized as "path_read/PatientID/ImagingScanName".
+            for patient_dir in (p for p in path_read.iterdir() if p.is_dir()):
+                for scan_dir in (s for s in patient_dir.iterdir() if s.is_dir()):
+                    scans.add((patient_dir.name, scan_dir.name))
+
+        else:
+            for file in path_read.rglob('*.npy'):
+                name = file.name[:-len('.npy')]
+                # Skip the radiomics tables created by a previous extraction.
+                if name.startswith('radiomics__') or any(
+                        part.startswith('features(') for part in file.parts):
+                    continue
+                if '__' not in name or '.' not in name:
+                    continue
+                # `rsplit` is used since an imaging scan name may itself contain a dot.
+                head, modality = name.rsplit('.', 1)
+                patient_id, _, sequence = head.partition('__')
+                if not (patient_id and sequence and modality):
+                    continue
+                scans.add((patient_id, sequence, modality))
+
+        return len(scans)
+
     def run_be_count(self) -> dict:
         """
         Count the number of scans in the given path and return the number of scans and the path to save the features.
@@ -670,10 +731,12 @@ class MEDimlExtraction:
             path_read = Path(data["path_read"])
         else:
             return {"error": "No path to read given!"}
+        # The ROI CSV file is optional. Without it, all the scans found in the read path are
+        # processed, using the union of all the ROIs of each scan.
         if "path_csv" in data.keys() and data["path_csv"] != "":
             path_csv = Path(data["path_csv"])
         else:
-            return {"error": "No path to csv given!"}
+            path_csv = None
         if "path_params" in data.keys() and data["path_params"] != "":
             path_params = Path(data["path_params"])
         else:
@@ -682,45 +745,53 @@ class MEDimlExtraction:
             path_save = Path(data["path_save"])
         else:
             path_save = None
-        if "use_niftis" in data.keys():
-            use_niftis = data["use_niftis"]
+        if "use_format" in data.keys():
+            use_format = data["use_format"]
+        elif data.get("use_niftis", False):
+            use_format = "nifti"
         else:
-            use_niftis = False
+            use_format = "npy"
 
         try:
             # CSV file path process
-            if not str(path_csv).endswith('.csv'):
+            if path_csv is not None and not str(path_csv).endswith('.csv'):
                 raise ValueError("The path to dataset csv should be a path to a csv file.")
 
             # Load params
             with open(path_params, 'r') as f:
                 params = json.load(f)
-            
-            # Load csv and count scans
-            tabel_roi = pd.read_csv(path_csv)
 
-            # Filter out patients not present in the read path
-            if use_niftis:
-                all_files = list(path_read.rglob('*.nii*'))
-            else:
-                all_files = list(path_read.rglob('*.npy'))
-            tabel_roi = tabel_roi[tabel_roi.apply(
-                lambda x: any(f"{x['PatientID']}__{x['ImagingScanName']}" in file.name for file in all_files), 
-                axis=1
-            )]
-            
-            # Count scans in path read
-            n_scans = len(tabel_roi['PatientID'].tolist())
+            if path_csv is not None:
+                # Load csv and count scans
+                tabel_roi = pd.read_csv(path_csv)
 
-            if type(params["roi_types"]) is list:
-                roi_label = params["roi_types"][0]
+                # Filter out patients not present in the read path
+                if use_format == "nifti":
+                    all_files = list(path_read.rglob('*.nii*'))
+                else:
+                    all_files = list(path_read.rglob('*.npy'))
+                tabel_roi = tabel_roi[tabel_roi.apply(
+                    lambda x: any(f"{x['PatientID']}__{x['ImagingScanName']}" in file.name for file in all_files),
+                    axis=1
+                )]
+
+                # Count scans in path read
+                n_scans = len(tabel_roi['PatientID'].tolist())
             else:
-                roi_label = params["roi_types"]
+                # No csv file given, count all the scans found in the read path
+                n_scans = self.count_scans_in_path(path_read, use_format)
+
+            # The roi types are only used to name the saved features, so they are optional
+            roi_types = params.get("roi_types") or DEFAULT_ROI_TYPE
+            if type(roi_types) is list:
+                roi_label = roi_types[0]
+            else:
+                roi_label = roi_types
             folder_save_path = path_save / f'features({roi_label})'
-        
+
         except Exception as e:
             return {"error": f"PROBLEM WITH COUNTING SCANS {str(e)}"}
-        
+
         return {"n_scans": n_scans, "folder_save_path": str(folder_save_path)}
     
     def run_be(self) -> dict:
@@ -740,10 +811,12 @@ class MEDimlExtraction:
             path_read = None
         if "path_save" in data.keys() and data["path_save"] != "":
             path_save = Path(data["path_save"])
+        # The ROI CSV file is optional. Without it, all the scans found in the read path are
+        # processed, using the union of all the ROIs of each scan.
         if "path_csv" in data.keys() and data["path_csv"] != "":
             path_csv = Path(data["path_csv"])
         else:
-            return {"error": "No path to csv given!"}
+            path_csv = None
         if "path_params" in data.keys() and data["path_params"] != "":
             path_params = Path(data["path_params"])
         else:
@@ -775,14 +848,12 @@ class MEDimlExtraction:
 
         try:
             # CSV file path process
-            if not str(path_csv).endswith('.csv'):
+            if path_csv is not None and not str(path_csv).endswith('.csv'):
                 raise ValueError("The path to dataset csv should be a path to a csv file.")
 
-            # Check if at least one path to data is given
-            if not ("path_read" in data.keys() and data["path_read"] != "") and not (
-                    "path_params" in data.keys() and data["path_params"] != "") and not (
-                    "path_csv" in data.keys() and data["path_csv"] != ""):
-                return {"error": "No path to data given! At least path to read, params and csv must be given."}
+            # Check if the required paths are given
+            if path_read is None or path_params is None:
+                return {"error": "No path to data given! At least path to read and params must be given."}
 
             # To avoid RAY memory issues
             os.environ['RAY_DISABLE_MEMORY_MONITOR'] = '1'

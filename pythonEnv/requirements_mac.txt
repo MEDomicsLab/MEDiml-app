@@ -1,4 +1,4 @@
-mediml
+mediml>=0.18.0
 jupytext
 ipykernel
 pymongo==4.7.3

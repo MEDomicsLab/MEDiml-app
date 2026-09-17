@@ -5,7 +5,7 @@ import { Dropdown } from 'primereact/dropdown'
 import { InputSwitch } from 'primereact/inputswitch'
 import { SelectButton } from 'primereact/selectbutton'
 import { TreeTable } from 'primereact/treetable'
-import React, { useContext, useEffect, useState } from 'react'
+import React, { useContext, useEffect, useRef, useState } from 'react'
 import { Alert, Card, Col, Form, ProgressBar, Row } from 'react-bootstrap'
 import { toast } from 'react-toastify'
 import { requestBackend } from "../../utilities/requests"
@@ -49,10 +49,11 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
   const [showEdit, setShowEdit] = useState(false) // used to display the extraction results
   const [useDatasetType, setUseDatasetType] = useState("npy") // A boolean variable to control the use of NIfTI dataset instead of NPY dataset
   const [nodes, setNodes] = useState([])
-  const [useWorkspace, setUseWorkspace] = useState(true) // A boolean variable to control the use of the workspace
+  const [useWorkspace, setUseWorkspace] = useState(false) // A boolean variable to control the use of the workspace
   const [analyzeDoseMaps, setAnalyzeDoseMaps] = useState(false) // A boolean variable to control the analysis of dose maps
   const [selectedPredDosesCSV, setSelectedPredDosesCSV] = useState('') // Path to CSV file containing prescribed doses per patient
   const [prescDoseColumn, setPrescDoseColumn] = useState('') // Column name for prescribed dose values in pred_doses_csv
+  const csvFileInputRef = useRef(null) // Used to reset the local ROI CSV file input, since the file is optional
 
   useEffect(() => {
     updateWSfolder()
@@ -174,6 +175,16 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
     }
     else {
       setSelectedCSVFile(event.target.files.path)
+    }
+  };
+
+  /**
+   * @description Clears the selected local ROI CSV file, since it is optional.
+   */
+  const handleClearCSVFile = () => {
+    setSelectedCSVFile('')
+    if (csvFileInputRef.current) {
+      csvFileInputRef.current.value = ''
     }
   };
 
@@ -511,7 +522,7 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
 
       {/* Check whether to use the workspace or not*/}
       <Row className="form-group-box">
-        <Form.Label htmlFor="file">Use current workspace data (recommanded)</Form.Label>
+        <Form.Label htmlFor="file">Use current workspace data</Form.Label>
         <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>If this is checked, the data available in the workspace will be used instead of local data.</p>
         <Col style={{ width: "150px" }}>
           <InputSwitch
@@ -701,23 +712,25 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
         {/* UPLOAD CSV FILE*/}
         <Row className="form-group-box">
           <Form.Label className="csv-file" htmlFor="file">
-            Path to CSV File
+            Path to CSV File (optional)
           </Form.Label>
           <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-            Path to the CSV file containing the scans to use for radiomics features extraction with 
-            their corresponding Regions of Interest
+            Path to the CSV file containing the scans to use for radiomics features extraction with
+            their corresponding Regions of Interest. If no file is given, all the scans found in the
+            dataset folder are extracted, using the union of all the ROIs of each scan.
           </p>
           {useWorkspace ? (
           <Col>
             <Dropdown
               style={{ maxWidth: "100%", height: "auto", width: "auto" }}
               filter
+              showClear
               value={selectedCSVFile}
-              onChange={(e) => setSelectedCSVFile(e.value)}
+              onChange={(e) => setSelectedCSVFile(e.value || '')}
               options={listCSVFiles}
               optionLabel="name"
               display="chip"
-              placeholder="Select a file"
+              placeholder="Select a file (optional)"
             />
           </Col> ) :(
           <Col>
@@ -726,9 +739,22 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
                 name="path_csv"
                 accept='.csv'
                 type="file"
+                ref={csvFileInputRef}
                 onChange={handleCSVFileChange}
               />
             </Form.Group>
+            {selectedCSVFile && (
+              <Button
+                type="button"
+                severity="secondary"
+                label="Clear"
+                name="ClearCSVButton"
+                onClick={handleClearCSVFile}
+                icon="pi pi-times"
+                iconPos="left"
+                text
+              />
+            )}
           </Col>
           )}
         </Row>
@@ -841,7 +867,6 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
                   disabled={(
                     !selectedReadFolder ||
                     !selectedSaveFolder ||
-                    !selectedCSVFile ||
                     refreshEnabled ||
                     !selectedSettingsFile ||
                     (analyzeDoseMaps && (!selectedPredDosesCSV || !prescDoseColumn.trim()))

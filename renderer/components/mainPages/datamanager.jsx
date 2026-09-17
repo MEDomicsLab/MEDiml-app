@@ -3,9 +3,9 @@ import { Dropdown } from "primereact/dropdown"
 import { InputSwitch } from "primereact/inputswitch"
 import { InputText } from 'primereact/inputtext'
 import { MultiSelect } from 'primereact/multiselect'
-import { ProgressSpinner } from 'primereact/progressspinner';
+import { ProgressSpinner } from 'primereact/progressspinner'
 import { SelectButton } from 'primereact/selectbutton'
-import React, { useContext, useEffect, useState } from 'react'
+import React, { useContext, useEffect, useRef, useState } from 'react'
 import { Alert, Card, Col, Container, Form, Offcanvas, ProgressBar, Row } from 'react-bootstrap'
 import Table from 'react-bootstrap/Table'
 import { toast } from 'react-toastify'
@@ -58,12 +58,13 @@ const DataManager = ({ pageId, configPath = "" }) => {
   const handleOffCanvasShow = () => setShowOffCanvas(true) // used to show the offcanvas
   const [preChecksImages, setPreChecksImages] = useState([]) // used to display the offcanvas
   const [preChecksImagesUrls, setPreChecksImagesUrls] = useState([]) // used to display the offcanvas
-  const [useWorkspace, setUseWorkspace] = useState(true) // A boolean variable to control the use of the workspace
-  const [useWorkspacePC, setUseWorkspacePC] = useState(true) // A boolean variable to control the use of the workspace for pre-checks
+  const [useWorkspace, setUseWorkspace] = useState(false) // A boolean variable to control the use of the workspace
+  const [useWorkspacePC, setUseWorkspacePC] = useState(false) // A boolean variable to control the use of the workspace for pre-checks
   const [runVoxelChecks, setRunVoxelChecks] = useState(true) // Voxel (dimensions) pre-checks
   const [runWindowChecks, setRunWindowChecks] = useState(true) // Window (intensity) pre-checks
   const [useDatasetType, setUseDatasetType] = useState("npy") // Dataset format for pre-checks: npy, nifti, or dicom
   const [isScanningNpyFolder, setIsScanningNpyFolder] = useState(false)
+  const csvFileInputRef = useRef(null) // Used to reset the local ROI CSV file input, since the file is optional
 
   useEffect(() => {
     updateWSfolder()
@@ -200,6 +201,16 @@ const DataManager = ({ pageId, configPath = "" }) => {
     }
     else {
       setSelectedCSVFile(event.target.files.path)
+    }
+  };
+
+  /**
+   * @description Clears the selected local ROI CSV file, since it is optional.
+   */
+  const handleClearCSVFile = () => {
+    setSelectedCSVFile('')
+    if (csvFileInputRef.current) {
+      csvFileInputRef.current.value = ''
     }
   };
 
@@ -741,7 +752,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
       <Form className="inputFile">
       {/* Check if workspace is gonna be used or not*/}
       <Row className="form-group-box">
-        <Form.Label htmlFor="file">Use Workspace Data (Recommanded)</Form.Label>
+        <Form.Label htmlFor="file">Use Workspace Data</Form.Label>
         <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
           If this is checked, the data available in the workspace will be used instead of local data.
         </p>
@@ -966,7 +977,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
 
         {/* Check if workspace is gonna be used or not*/}
         <Row className="form-group-box">
-          <Form.Label htmlFor="file">Use Workspace Data (Recommanded)</Form.Label>
+          <Form.Label htmlFor="file">Use Workspace Data</Form.Label>
           <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
             If this is checked, the data available in the workspace will be used instead of local data.
           </p>
@@ -995,19 +1006,22 @@ const DataManager = ({ pageId, configPath = "" }) => {
         {useWorkspacePC ?  (
           <Row className="form-group-box">
             <Col style={{ width: "150px" }}>
-              <h6 className="csv-file-ws">CSV from workspace</h6>
+              <h6 className="csv-file-ws">CSV from workspace (optional)</h6>
               <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-                CSV file containing the scans to check and their associated ROIs (Region of Interest)
+                CSV file containing the scans to check and their associated ROIs (Region of Interest).
+                If no file is given, all the scans matching the pre-checks options are analyzed, using
+                the union of all the ROIs of each scan.
               </p>
               <Dropdown
                 style={{ maxWidth: "100%", height: "auto", width: "auto" }}
                 filter
+                showClear
                 value={selectedCSVFile}
-                onChange={(e) => setSelectedCSVFile(e.value)}
+                onChange={(e) => setSelectedCSVFile(e.value || '')}
                 options={listCSVFiles}
                 optionLabel="name"
                 display="chip"
-                placeholder="Select a file"
+                placeholder="Select a file (optional)"
               />
             </Col>
             <Col style={{ width: "150px" }}>
@@ -1058,21 +1072,37 @@ const DataManager = ({ pageId, configPath = "" }) => {
             <Col style={{ width: "150px" }}>
               <Form method="post" encType="multipart/form-data" className="inputFile">
                 {/* UPLOAD CSV FILE*/}
-                <Form.Label 
+                <Form.Label
                   className="csv-file"
                   htmlFor="file">
-                    Local CSV File
+                    Local CSV File (optional)
                 </Form.Label>
                 <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-                  CSV file containing the scans to check and their associated ROI (Region of Interest)
+                  CSV file containing the scans to check and their associated ROI (Region of Interest).
+                  If no file is given, all the scans matching the pre-checks options are analyzed, using
+                  the union of all the ROIs of each scan.
                 </p>
                 <Form.Group controlId="enterFile">
                   <Form.Control
                     name="pathCSV"
+                    accept='.csv'
                     type="file"
+                    ref={csvFileInputRef}
                     onChange={handleCSVFileChange}
                   />
                 </Form.Group>
+                {selectedCSVFile && (
+                  <Button
+                    type="button"
+                    severity="secondary"
+                    label="Clear"
+                    name="ClearCSVButton"
+                    onClick={handleClearCSVFile}
+                    icon="pi pi-times"
+                    iconPos="left"
+                    text
+                  />
+                )}
               </Form>
             </Col>
 
@@ -1236,7 +1266,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
             name="RunButton"
             onClick={handlePreChecksRunClick}
             disabled={
-              (!selectedCSVFile || refreshEnabledPreChecks) || 
+              refreshEnabledPreChecks ||
               (selectedModalities.length === 0 && selectedInstitutions.length === 0 && selectedStudies.length === 0 && !customWildCard) ||
               (!runVoxelChecks && !runWindowChecks)}
             icon="pi pi-play"
