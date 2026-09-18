@@ -6,6 +6,8 @@ import { toast } from 'react-toastify'
 import Node, { updateHasWarning } from "../../flow/node"
 import { DataContext } from "../../workspace/dataContext"
 import { set } from "lodash"
+import Caption from '../../primitives/Caption'
+import { sectionCardClass } from '../../primitives/SectionCard'
 
 /**
  * @param {string} id id of the node
@@ -102,7 +104,7 @@ const Data = ({ id, data, type }) => {
         setupParam={data.setupParam}
         nodeSpecific={
           <>
-            <Row className="form-group-box" style={{ textAlign: "center", alignItems: "center", justifyContent: "center" }}>
+            <Row className={sectionCardClass} style={{ alignItems: "center", justifyContent: "center" }}>
             <Col>
             {/* nameType */}
             {/*<Form.Group controlId="nameType">
@@ -128,7 +130,7 @@ const Data = ({ id, data, type }) => {
             {/* path features */}
             <Form.Group controlId="FeaturePath" style={sectionStyle}>
               <Form.Label className="FeaturePath">Features Folder Name</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Select the folder containing feature files for training.</p>
+              <Caption>Select the folder containing feature files for training.</Caption>
               <Col style={{ width: "300px", margin: "0 auto", display: "block", textAlign: "center" }}>
                 <Dropdown
                   style={{ maxWidth: "100%", height: "auto", width: "auto" }}
@@ -152,7 +154,7 @@ const Data = ({ id, data, type }) => {
             {(listCSVFiles.length > 0) && (
             <Form.Group controlId="selectFeaturesFiles" style={lastSectionStyle}>
               <Form.Label className="selectFiles" style={{ marginTop: "10px" }}>Select Features Files</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Choose which feature files to use for model training.</p>
+              <Caption>Choose which feature files to use for model training.</Caption>
               <MultiSelect
                 style={{ maxWidth: "100%", height: "auto", width: "auto" }}
                 value={featuresFiles} 

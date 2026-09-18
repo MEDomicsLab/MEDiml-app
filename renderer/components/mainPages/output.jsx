@@ -10,7 +10,7 @@ import { Card } from "primereact/card"
 import { ProgressBar } from "primereact/progressbar"
 import { Tooltip } from "primereact/tooltip"
 import MEDconfig from "../../../medomics.dev"
-import { IoClose } from "react-icons/io5"
+import { X as IoClose } from "lucide-react"
 import { PageInfosContext } from "./moduleBasics/pageInfosContext"
 import { InputNumber } from "primereact/inputnumber"
 
@@ -151,7 +151,14 @@ const ActiveElement = ({ activeElement }) => {
           title={
             <>
               {metadata.name}
+              {/* TODO(a11y): this is an <svg> with an onClick, so it is not
+                  focusable and cannot be activated from the keyboard. The label
+                  below at least gives it an accessible name; making it operable
+                  means wrapping it in a real <button>, which changes this
+                  card's layout and belongs in its own change. */}
               <IoClose
+                role="button"
+                aria-label="Close output"
                 className="btn-close-output-card"
                 onClick={() => {
                   let topic = "removeId/" + metadata.urlId

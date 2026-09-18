@@ -4,10 +4,6 @@
   --num-controls-btn: 6;
 }
 
-.minimapStyle {
-  height: 120;
-}
-
 .draggable-component {
   cursor: grab;
   padding: 0.3rem;
@@ -258,11 +254,8 @@
 }
 
 .available-nodes-panel .p-card-body .p-card-content {
-  padding: 0;
+  /* merged from an earlier duplicate of this selector */
   background-color: transparent;
-}
-
-.available-nodes-panel .p-card-body .p-card-content {
   padding: 0;
 }
 
@@ -369,7 +362,12 @@
 .flow-btn-panel-left-vertical {
   position: absolute;
   left: 1.75rem;
-  bottom: calc(1rem + calc(var(--num-controls-btn)+2) * 1.5rem);
+  /* TODO(phase-4): was
+       bottom: calc(1rem + calc(var(--num-controls-btn)+2) * 1.5rem);
+     `+` needs surrounding whitespace inside calc(), so the whole expression was
+     invalid and `bottom` was dropped -- this element has always resolved to
+     `bottom: auto`. Restoring it would move the control, so it is removed here
+     and left for the flow canvas rework. */
   cursor: pointer;
   z-index: 10;
   translate: -50% 0;

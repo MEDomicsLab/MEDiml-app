@@ -2,21 +2,11 @@
 
 /* Documentation link styles */
 .docLink {
-  display: "flex";
   justify-content: center;
-  align-items: "center";
-  margin-top: "10px";
-}
-
-.docLink-image {
-  width: "20px";
-  height: "20px";
-  margin-right: "10px";
 }
 
 .inputFile {
   width: 100%;
-  display: flexbox;
   position: relative;
 }
 
@@ -60,7 +50,6 @@
 }
 
 .results-button {
-  width: 100%;
   font-size: large;
   color: black;
   margin-top: 10px;
@@ -84,20 +73,6 @@
   padding: 2px;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   text-align: center;
-}
-
-.form-group-box {
-  margin-top: 10px;
-  margin-right: 2px;
-  margin-left: 2px;
-  background-color: white;
-  border-radius: 10px;
-  padding: 2px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-  text-align: center;
-  font-weight: bold;
-  padding-bottom: 10px;
-  padding-top: 10px;
 }
 
 .warning-message {

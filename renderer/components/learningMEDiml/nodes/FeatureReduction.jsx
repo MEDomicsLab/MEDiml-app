@@ -3,6 +3,8 @@ import { InputNumber } from 'primereact/inputnumber';
 import { React, useEffect, useState } from "react";
 import { Form, Row } from "react-bootstrap";
 import Node, { updateHasWarning } from "../../flow/node";
+import Caption from '../../primitives/Caption'
+import { sectionCardClass } from '../../primitives/SectionCard'
 
 
 /**
@@ -74,13 +76,13 @@ const FeatureReduction = ({ id, data, type }) => {
         nodeSpecific={
           <>
             <Row 
-              className="form-group-box"
+              className={sectionCardClass}
               style={{ maxHeight: "400px", overflowY: "auto", overflowX: "hidden", paddingRight: "8px" }}
             >
               {/* nSplits */}
               <Form.Group controlId="nSplits" style={sectionStyle}>
               <Form.Label className="nSplits">Number of Splits</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Number of splits for Feature Reduction.</p>
+              <Caption>Number of splits for Feature Reduction.</Caption>
                 <InputNumber
                     style={{width: "300px"}}
                     buttonLayout="horizontal"
@@ -103,7 +105,7 @@ const FeatureReduction = ({ id, data, type }) => {
               {/* corrType */}
               <Form.Group controlId="corrType" style={sectionStyle}>
               <Form.Label className="corrType">Correlation Method</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Method to measure feature correlations.</p>
+              <Caption>Method to measure feature correlations.</Caption>
                 <Dropdown 
                     style={{width: "300px"}}
                     value={data.setupParam.possibleSettings.defaultSettings.FDA.corrType}
@@ -122,7 +124,7 @@ const FeatureReduction = ({ id, data, type }) => {
               {/* threshStableStart */}
               <Form.Group controlId="threshStableStart" style={sectionStyle}>
               <Form.Label className="threshStableStart">Stability Threshold</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Minimum correlation threshold for features to be considered stable.</p>
+              <Caption>Minimum correlation threshold for features to be considered stable.</Caption>
                 <InputNumber
                     style={{width: "300px"}}
                     buttonLayout="horizontal"
@@ -148,7 +150,7 @@ const FeatureReduction = ({ id, data, type }) => {
               {/* threshInterCorr */}
               <Form.Group controlId="threshInterCorr" style={sectionStyle}>
               <Form.Label className="threshInterCorr">Inter-Correlation Threshold</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Threshold for identifying redundant feature pairs.</p>
+              <Caption>Threshold for identifying redundant feature pairs.</Caption>
                 <InputNumber
                     style={{width: "300px"}}
                     buttonLayout="horizontal"
@@ -174,7 +176,7 @@ const FeatureReduction = ({ id, data, type }) => {
               {/* minNfeatStable */}
               <Form.Group controlId="minNfeatStable" style={sectionStyle}>
               <Form.Label className="minNfeatStable">Minimum Number of Stable Features</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Minimum stable features to retain after filtering.</p>
+              <Caption>Minimum stable features to retain after filtering.</Caption>
                 <InputNumber
                     style={{width: "300px"}}
                     buttonLayout="horizontal"
@@ -197,7 +199,7 @@ const FeatureReduction = ({ id, data, type }) => {
               {/* minNfeatInterCorr */}
               <Form.Group controlId="minNfeatInterCorr" style={sectionStyle}>
               <Form.Label className="minNfeatInterCorr">Minimum Number of Inter-Correlated Features</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Minimum inter-correlated features to retain.</p>
+              <Caption>Minimum inter-correlated features to retain.</Caption>
                 <InputNumber
                     style={{width: "300px"}}
                     buttonLayout="horizontal"
@@ -220,7 +222,7 @@ const FeatureReduction = ({ id, data, type }) => {
               {/* minNfeat */}
               <Form.Group controlId="minNfeat" style={lastSectionStyle}>
               <Form.Label className="minNfeat">Final Number of Features</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Total features to use for model training.</p>
+              <Caption>Total features to use for model training.</Caption>
                 <InputNumber
                     style={{width: "300px"}}
                     buttonLayout="horizontal"

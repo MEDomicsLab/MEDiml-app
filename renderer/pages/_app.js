@@ -16,6 +16,20 @@ import { WorkspaceProvider } from "../components/workspace/workspaceContext"
 import { loadMEDDataObjects, updateGlobalData } from "../utilities/appUtils/globalDataUtils"
 
 // CSS
+//
+// Layer order matters and is deliberate:
+//   1. tokens      design tokens only, no rules -- must be defined before
+//                  anything can reference them
+//   2. vendor      bootstrap, primereact, blueprint, flexlayout, ...
+//   3. base        globals.css: resets and app-wide structural classes
+//   4. features    per-module stylesheets, which may override the base
+//   5. bridge      customPrimeReact.css, which must come after the vendor
+//                  theme it adjusts
+
+// 1. tokens
+import "../styles/tokens.css"
+
+// 2. vendor
 import "bootstrap/dist/css/bootstrap.min.css"
 // import 'bootswatch/dist/lux/bootstrap.min.css';
 import "react-simple-tree-menu/dist/main.css"
@@ -35,7 +49,10 @@ import "flexlayout-react/style/light.css"
 import "react-complex-tree/lib/style-modern.css"
 import "react-contexify/dist/ReactContexify.css"
 
-// --my styles (priority over bootstrap and other dist styles)
+// 3. base -- first app stylesheet, so feature styles below can override it
+import "../styles/globals.css"
+
+// 4. features (priority over bootstrap and other dist styles)
 import "../styles/application/application.css"
 import "../styles/customPrimeReact.css"
 import "../styles/datatableWrapper.css"
@@ -46,7 +63,6 @@ import "../styles/extraction/extractionMEDiml.css"
 import "../styles/extraction/extractionTabular.css"
 import "../styles/flow/reactFlow.css"
 import "../styles/flow/results.css"
-import "../styles/globals.css"
 import "../styles/iconSidebar.css"
 import "../styles/imageContainer.css"
 import "../styles/input/MEDprofiles.css"

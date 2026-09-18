@@ -165,5 +165,7 @@ path2condaenv_toDeleteInProd.txt
 gh_token.txt
 package-lock.json
 pythonCode/local_dir/*
+.css-snapshot-fixture.html
+css-snapshot*.json
 
 !*.gitkeep

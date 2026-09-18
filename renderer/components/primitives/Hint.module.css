@@ -1,0 +1,84 @@
+/* Hint -- the "What is this?" pill, the panel it opens, and the metadata badge.
+   Shared by <Field> (one parameter) and <SectionCard row> (one card).
+
+   Moved verbatim out of Field.module.css when SectionCard gained a row layout:
+   the card title needs the same pill, and duplicating these rules is how two
+   pills drift apart. See useHint.jsx for the behaviour. */
+
+/* Replaces the words "(optional)" appended to a label. Same information, less
+   of the sentence, and it reads as metadata rather than part of the name. */
+.badge {
+  font-size: var(--med-text-xs);
+  font-weight: 500;
+  color: var(--med-text-secondary);
+  background-color: var(--med-surface-sunken);
+  border-radius: var(--med-radius-sm);
+  padding: 0 var(--med-space-2);
+  white-space: nowrap;
+}
+
+/* The hint toggle. A pill button matching the one on the MEDiml Modules landing
+   page, NOT a tooltip: a tooltip cannot be read on a touch device, vanishes
+   while you try to read it, cannot be copied from, and cannot hold a link --
+   and these hints carry documentation links. Parameter descriptions are this
+   tool's documentation, so they have to stay readable. */
+.infoToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--med-border-subtle);
+  background: var(--med-surface-sunken);
+  color: var(--med-text-secondary);
+  border-radius: var(--med-radius-pill);
+  padding: 0 var(--med-space-2);
+  font-size: var(--med-text-xs);
+  line-height: 1.7;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--med-duration-fast) var(--med-ease), border-color var(--med-duration-fast) var(--med-ease), color var(--med-duration-fast) var(--med-ease);
+}
+
+.infoToggle:hover {
+  border-color: var(--med-accent);
+  color: var(--med-text-primary);
+}
+
+.infoToggle[aria-expanded="true"] {
+  border-color: var(--med-accent);
+  color: var(--med-text-primary);
+}
+
+.infoIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+/* The expanded hint. Same shape as the landing page's info panel. */
+.infoPanel {
+  border: 1px solid var(--med-border-subtle);
+  border-radius: var(--med-radius-md);
+  background-color: var(--med-surface-sunken);
+  padding: calc(var(--med-space-2) * var(--med-density)) var(--med-space-3);
+  font-size: var(--med-text-sm);
+  line-height: var(--med-leading-body);
+  color: var(--med-text-primary);
+  max-width: var(--med-measure);
+  text-align: start;
+}
+
+.docLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: var(--med-space-1);
+  /* --med-accent is 4.47:1 on white, under the 4.5:1 needed for small text.
+     --med-status-info is 7.3:1 and reads as a link just as clearly. */
+  color: var(--med-status-info);
+  font-weight: 500;
+  text-decoration: underline;
+}
+
+.docLink:hover {
+  color: var(--med-status-info);
+  text-decoration: underline;
+}

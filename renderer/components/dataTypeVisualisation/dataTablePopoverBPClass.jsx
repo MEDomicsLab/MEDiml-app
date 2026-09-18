@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useState } from "react"
 import { Button, Popover, Menu, MenuItem, InputGroup } from "@blueprintjs/core"
 import { Select } from "@blueprintjs/select"
-import { Tag } from "react-bootstrap-icons"
+import { Tag } from "lucide-react"
 import { Stack } from "react-bootstrap"
 import { DataContext } from "../workspace/dataContext"
 import { Utils as danfoUtils } from "../../utilities/danfo.js"

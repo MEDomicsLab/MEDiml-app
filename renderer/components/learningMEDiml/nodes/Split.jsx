@@ -6,6 +6,8 @@ import { useContext, useEffect, useState } from 'react';
 import { Col, Form, Row } from "react-bootstrap";
 import Node, { updateHasWarning } from "../../flow/node";
 import { DataContext } from "../../workspace/dataContext";
+import Caption from '../../primitives/Caption'
+import { sectionCardClass } from '../../primitives/SectionCard'
 
 
 /**
@@ -136,13 +138,13 @@ const Split = ({ id, data, type }) => {
         nodeSpecific={
           <>
             <Row 
-              className="form-group-box" 
+              className={sectionCardClass} 
               style={{ maxHeight: "400px", textAlign: "center", alignItems: "center", justifyContent: "center", overflowY: "auto", overflowX: "hidden" }}
             >
               {/* Outcome Name */}
               <Form.Group controlId="outcomeName" style={sectionStyle}>
                 <Form.Label className="outcomeName">Outcome Name</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>A reference name to describe the problem studied.</p>
+                <Caption>A reference name to describe the problem studied.</Caption>
                 <InputText
                   style={{ maxWidth: "100%", height: "auto", width: "auto", display: "block", margin: "0 auto" }}
                   value={data.setupParam.possibleSettings.defaultSettings.outcome_name}
@@ -160,7 +162,7 @@ const Split = ({ id, data, type }) => {
               {/* Split Method */}
               <Form.Group controlId="splitMethod" style={sectionStyle}>
               <Form.Label className="splitMethod">Create Holdout Set</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>If activated a holdout set will be created. If not, all the data will be used for learning.</p>
+              <Caption>If activated a holdout set will be created. If not, all the data will be used for learning.</Caption>
                 <InputSwitch 
                     checked={data.setupParam.possibleSettings.defaultSettings.method == 'random' ? true : false} 
                     onChange={(event) => {
@@ -176,9 +178,9 @@ const Split = ({ id, data, type }) => {
               {/* Workspace Folder */}
               <Form.Group controlId="workspaceFolder" style={sectionStyle}>
                 <Form.Label className="workspaceFolder">Experiment's Workspace Folder</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
+                <Caption>
                   Folder containing the experiments' resources (features, outcome file, etc.).
-                </p>
+                </Caption>
                 <Col style={{ width: "300px", margin: "0 auto", display: "block", textAlign: "center" }}>
                   <Dropdown
                     style={{ maxWidth: "100%", height: "auto", width: "auto" }}
@@ -203,7 +205,7 @@ const Split = ({ id, data, type }) => {
               {/* Path Outcome */}
               <Form.Group controlId="outcomeFile" style={sectionStyle}>
               <Form.Label className="outcomeFile">Outcomes CSV</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>CSV file of the outcomes.</p>
+              <Caption>CSV file of the outcomes.</Caption>
               <Col style={{ width: "300px", margin: "0 auto", display: "block", textAlign: "center" }}>
                 <Dropdown
                   style={{ maxWidth: "100%", height: "auto", width: "auto" }}
@@ -228,9 +230,9 @@ const Split = ({ id, data, type }) => {
               {/* Save Folder */}
               <Form.Group controlId="experimentSaveFolder" style={lastSectionStyle}>
                 <Form.Label className="experimentSaveFolder">Save Folder</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
+                <Caption>
                   Folder where the results will be saved. The folder should not be empty.
-                </p>
+                </Caption>
                 <Col style={{ width: "300px", margin: "0 auto", display: "block", textAlign: "center" }}>
                   <Dropdown
                     style={{ maxWidth: "100%", height: "auto", width: "auto" }}
@@ -258,7 +260,7 @@ const Split = ({ id, data, type }) => {
                   className="splitType">
                       Split Type
               </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Choose method for splitting data into sets.</p>
+              <Caption>Choose method for splitting data into sets.</Caption>
               <Dropdown 
                   style={{width: "300px"}}
                   value={data.setupParam.possibleSettings.defaultSettings.active_method[0]}
@@ -288,7 +290,7 @@ const Split = ({ id, data, type }) => {
                   className="splitMethod">
                       Split Method
               </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Algorithm for distributing samples into train/test sets.</p>
+              <Caption>Algorithm for distributing samples into train/test sets.</Caption>
                 <Dropdown 
                     style={{width: "300px", display: "block", margin: "0 auto"}}
                     value={data.setupParam.possibleSettings.defaultSettings.Random.method}
@@ -310,7 +312,7 @@ const Split = ({ id, data, type }) => {
                   className="nSplits">
                       Splits Number
               </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Total number of data partitions to create.</p>
+              <Caption>Total number of data partitions to create.</Caption>
                 <InputNumber
                     style={{width: "300px", display: "block", margin: "0 auto"}}
                     buttonLayout="horizontal"
@@ -336,7 +338,7 @@ const Split = ({ id, data, type }) => {
                   className="stratifyInstitutions">
                       Flag by Institution
               </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Maintain institution representation in train/test.</p>
+              <Caption>Maintain institution representation in train/test.</Caption>
               <br></br>
                 <InputSwitch 
                     checked={data.setupParam.possibleSettings.defaultSettings.Random.stratifyInstitutions} 
@@ -355,7 +357,7 @@ const Split = ({ id, data, type }) => {
                   className="testProportion">
                       Train/Test Proportion
               </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Percentage of data allocated for testing.</p>
+              <Caption>Percentage of data allocated for testing.</Caption>
                 <InputNumber
                     style={{width: "300px", display: "block", margin: "0 auto"}}
                     buttonLayout="horizontal"
@@ -380,7 +382,7 @@ const Split = ({ id, data, type }) => {
               {/* Seed */}
               <Form.Group controlId="seed" style={lastSectionStyle}>
                 <Form.Label className="seed">Random Seed</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Ensures reproducible random data splitting.</p>
+                <Caption>Ensures reproducible random data splitting.</Caption>
                 <InputNumber
                     style={{width: "300px", display: "block", margin: "0 auto"}}
                     buttonLayout="horizontal"
@@ -405,7 +407,7 @@ const Split = ({ id, data, type }) => {
               {/* Number of splits */}
               <Form.Group controlId="nSplits" style={sectionStyle}>
                 <Form.Label className="nSplits">Number of folds</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>K value for cross-validation folds (K).</p>
+                <Caption>K value for cross-validation folds (K).</Caption>
                 <InputNumber
                     style={{width: "300px"}}
                     buttonLayout="horizontal"
@@ -428,7 +430,7 @@ const Split = ({ id, data, type }) => {
               <Form.Group controlId="seed" style={lastSectionStyle}>
                 <Form.Label className="seed">Random Seed
                 </Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Ensures reproducible random data splitting.</p>
+                <Caption>Ensures reproducible random data splitting.</Caption>
                 <InputNumber
                     style={{width: "300px", display: "block", margin: "0 auto"}}
                     buttonLayout="horizontal"

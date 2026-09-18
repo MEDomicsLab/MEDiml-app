@@ -1,6 +1,6 @@
 import React, { useContext, useState } from "react"
 import { Accordion, Stack, Button } from "react-bootstrap"
-import { ArrowCounterclockwise, Folder } from "react-bootstrap-icons"
+import { Folder, RotateCcw as ArrowCounterclockwise } from "lucide-react"
 import { SidebarFolder } from "../components"
 import { LayoutModelContext } from "../../layoutContext"
 import { useEffect } from "react"

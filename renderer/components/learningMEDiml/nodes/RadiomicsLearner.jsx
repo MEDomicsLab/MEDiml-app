@@ -5,6 +5,8 @@ import { InputText } from 'primereact/inputtext';
 import { useState } from 'react';
 import { Form, Row } from "react-bootstrap";
 import Node, { updateHasWarning } from "../../flow/node";
+import Caption from '../../primitives/Caption'
+import { sectionCardClass } from '../../primitives/SectionCard'
 
 
 /**
@@ -37,11 +39,11 @@ const RadiomicsLearner = ({ id, data, type }) => {
         nodeSpecific={
           <>
             {/* Show segmentation warning when there is no roisList or the roisList is empty */}
-            <Row className="form-group-box" style={{ maxHeight: "400px", overflowY: "auto", overflowX: "hidden", paddingRight: "8px" }}>
+            <Row className={sectionCardClass} style={{ maxHeight: "400px", overflowY: "auto", overflowX: "hidden", paddingRight: "8px" }}>
               {/* Model type */}
               <Form.Group controlId="algo" style={sectionStyle}>
                 <Form.Label className="algo">Algorithm</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Learning algorithm for model training.</p>
+                <Caption>Learning algorithm for model training.</Caption>
                 <Dropdown
                     value={data.setupParam.possibleSettings.defaultSettings.model}
                     options={[{ name: 'XGBoost' }]}
@@ -59,7 +61,7 @@ const RadiomicsLearner = ({ id, data, type }) => {
               {/* varImportanceThreshold */}
               <Form.Group controlId="varImportanceThreshold" style={sectionStyle}>
               <Form.Label className="varImportanceThreshold">Variable Importance Threshold</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Higher threshold keeps fewer important variables in the model.</p>
+              <Caption>Higher threshold keeps fewer important variables in the model.</Caption>
                 <InputNumber
                     style={{width: "300px"}}
                     buttonLayout="horizontal"
@@ -84,9 +86,9 @@ const RadiomicsLearner = ({ id, data, type }) => {
               {/* optimizeThreshold */}
               <Form.Group controlId="optimizeThreshold" style={sectionStyle}>
                 <Form.Label className="optimizeThreshold">Model's Optimize Threshold</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
+                <Caption>
                   Identify the best probability cutoff.
-                </p>
+                </Caption>
                 <InputSwitch 
                   checked={data.setupParam.possibleSettings.defaultSettings.XGBoost.optimizeThreshold}
                   onChange={(event) => {
@@ -101,9 +103,9 @@ const RadiomicsLearner = ({ id, data, type }) => {
               {/* finalizeModel */}
               <Form.Group controlId="finalizeModel" style={sectionStyle}>
                 <Form.Label className="finalizeModel">Finalize Model</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
+                <Caption>
                   Retrain a final model on the entire learning set.
-                </p>
+                </Caption>
                 <InputSwitch 
                   checked={data.setupParam.possibleSettings.defaultSettings.XGBoost.finalizeModel}
                   onChange={(event) => {
@@ -118,7 +120,7 @@ const RadiomicsLearner = ({ id, data, type }) => {
               {/* optimizationMetric */}
               <Form.Group controlId="optimizationMetric" style={sectionStyle}>
               <Form.Label className="optimizationMetric">Optimization Metric</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Performance metric used when tuning with PyCaret.</p>
+              <Caption>Performance metric used when tuning with PyCaret.</Caption>
               <InputText
                     key="optimizationMetric"
                     style={{width: "300px"}}
@@ -136,7 +138,7 @@ const RadiomicsLearner = ({ id, data, type }) => {
               {/* Seed */}
               <Form.Group controlId="seed" style={sectionStyle}>
               <Form.Label className="seed">Random Seed</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Seed value for reproducible random number generation.</p>
+              <Caption>Seed value for reproducible random number generation.</Caption>
                 <InputNumber
                     style={{width: "300px"}}
                     buttonLayout="horizontal"
@@ -155,7 +157,7 @@ const RadiomicsLearner = ({ id, data, type }) => {
               {/* nameSave */}
               <Form.Group controlId="nameSave" style={lastSectionStyle}>
               <Form.Label className="nameSave">Model's Save Name</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Name for saving the trained model.</p>
+              <Caption>Name for saving the trained model.</Caption>
                 <InputText
                     key="nameSaveModel"
                     style={{width: "300px"}}
