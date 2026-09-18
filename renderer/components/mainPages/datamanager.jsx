@@ -799,7 +799,6 @@ const DataManager = ({ pageId, configPath = "" }) => {
         align="center"
         title="Use workspace data"
         hint="Read the input data from the current workspace instead of picking folders from disk. Workspace folders are the ones listed in the explorer on the left."
-        docHref={MEDIML_DOCS.dataManager}
       >
         <InputSwitch
           checked={useWorkspace}
@@ -843,16 +842,11 @@ const DataManager = ({ pageId, configPath = "" }) => {
           />
         </SectionCard>
 
-        {/* SAVE FOLDER.
-            Split out from the old "Saving options" card, which held the folder
-            AND the core count. One parameter per card keeps every title in the
-            same place. The mode-dependent "Save in workspace" / "Save in a local
-            path" sub-heading is gone: the control itself already says which. */}
+        {/* SAVE FOLDER */}
         <SectionCard
           row
           title="Save folder"
           hint="Where the processed MEDscan objects (.npy) are written."
-          docHref={MEDIML_DOCS.dataManager}
         >
           <SourcePicker
             mode={useWorkspace ? "workspace" : "local"}
@@ -872,7 +866,6 @@ const DataManager = ({ pageId, configPath = "" }) => {
           align="center"
           title="Cores"
           hint="Number of CPU cores used for the parallel conversion."
-          docHref={MEDIML_DOCS.generalAnalysisParams}
         >
           <Form.Control
             name="nBatch"
@@ -968,7 +961,6 @@ const DataManager = ({ pageId, configPath = "" }) => {
           align="center"
           title="Use workspace data"
           hint="Read the dataset and the ROI CSV from the current workspace instead of picking them from disk."
-          docHref={MEDIML_DOCS.dataManager}
         >
           <InputSwitch
             checked={useWorkspacePC}
@@ -982,7 +974,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
           align="center"
           title="Dataset format"
           hint="Which on-disk format the scans to check are in. NPY means MEDscan objects produced by the data processing step above."
-          docHref={MEDIML_DOCS.preChecksParams}
+          docHref={MEDIML_DOCS.inputData}
         >
           <SelectButton
             value={useDatasetType}
@@ -995,12 +987,6 @@ const DataManager = ({ pageId, configPath = "" }) => {
             ]}
           />
         </SectionCard>
-
-        {/* The useWorkspacePC ? ... : ... branch that used to wrap these three
-            parameters is gone: <SourcePicker> takes the mode as a prop. That
-            removed ~90 lines and, more importantly, a real divergence -- the
-            workspace branch had hints and doc links while the local branch had
-            differently-worded plain captions for the same three parameters. */}
 
         {/* UPLOAD CSV FILE*/}
         <SectionCard
@@ -1062,7 +1048,6 @@ const DataManager = ({ pageId, configPath = "" }) => {
           row
           title="Save results to"
           hint="Folder where the pre-checks plots and JSON summaries are written."
-          docHref={MEDIML_DOCS.preChecksParams}
         >
           <SourcePicker
             mode={useWorkspacePC ? "workspace" : "local"}
@@ -1092,9 +1077,6 @@ const DataManager = ({ pageId, configPath = "" }) => {
               ) : null
             }
           >
-            {/* aria-label on each: these are placeholder-only controls, and a
-                placeholder disappears as soon as a value is chosen, leaving a
-                screen reader with nothing to announce. */}
             <MultiSelect
               value={selectedStudies}
               onChange={(e) => setSelectedStudies(e.value)}
@@ -1133,7 +1115,6 @@ const DataManager = ({ pageId, configPath = "" }) => {
             row
             title="Check types"
             hint="Which pre-checks to run. Voxel checks report the dimension ranges in the dataset; window checks report the intensity ranges. Both are on by default."
-            docHref={MEDIML_DOCS.preChecksParams}
           >
             <Field inline label="Voxel checks (dimensions)">
               <InputSwitch

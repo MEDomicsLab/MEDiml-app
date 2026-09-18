@@ -539,10 +539,6 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
     {renderResults()}
     {renderEdit()}
     <div>
-    {/* No `text-center`: it centred the page title and doc link, which is the
-        only thing that made this page differ from DataManager. Card contents
-        were never affected -- SectionCard sets `text-align: start` itself. The
-        one centred element on the page is now the Toolbar, deliberately. */}
     <Card>
       <Card.Body>
         <Card.Header>
@@ -554,17 +550,12 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
           />
         </Card.Header>
 
-      {/* The <Form method="post" encType="multipart/form-data"> that used to
-          wrap these cards is gone. Nothing ever submitted it, and SourcePicker
-          must not sit inside a form it does not own. */}
-
       {/* Check whether to use the workspace or not*/}
       <SectionCard
         row
         align="center"
         title="Use current workspace data"
         hint="Read the dataset, ROI CSV and settings file from the current workspace instead of picking them from disk."
-        docHref={MEDIML_DOCS.batchExtractor}
       >
         <InputSwitch
           checked={useWorkspace}
@@ -578,7 +569,6 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
         align="center"
         title="Analyze dose maps"
         hint="Extract dosiomics features in addition to radiomics. Requires a CSV of prescribed doses per patient, configured below."
-        docHref={MEDIML_DOCS.extractionParams}
       >
         <InputSwitch
           checked={analyzeDoseMaps}
@@ -592,7 +582,6 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
             row
             title="Prescribed doses CSV"
             hint="CSV file giving the prescribed dose per patient. It must include a PatientID column, plus the dose column named below."
-            docHref={MEDIML_DOCS.extractionParams}
           >
             <SourcePicker
               mode={useWorkspace ? "workspace" : "local"}
@@ -612,7 +601,6 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
             align="center"
             title="Dose column name"
             hint="Name of the column in the prescribed doses CSV holding the prescription dose for each patient."
-            docHref={MEDIML_DOCS.extractionParams}
           >
             <Form.Control
               name="presc_dose_column"
@@ -626,15 +614,13 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
         </>
       )}
 
-      {/* DATASET FORMAT -- split out of the dataset-folder card so that every
-          card carries exactly one parameter and every title sits in the same
-          place. */}
+      {/* DATASET FORMAT */}
       <SectionCard
         row
         align="center"
         title="Dataset format"
         hint="Which on-disk format the scans are in. NPY means MEDscan objects produced by the DataManager."
-        docHref={MEDIML_DOCS.featuresExtraction}
+        docHref={MEDIML_DOCS.inputData}
       >
         <SelectButton
           value={useDatasetType}
@@ -744,7 +730,6 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
           row
           title="Save folder"
           hint="Where the extracted feature tables and JSON files are written. A sub-folder is created per ROI type."
-          docHref={MEDIML_DOCS.batchExtractor}
         >
           <SourcePicker
             mode={useWorkspace ? "workspace" : "local"}
@@ -762,21 +747,13 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
           />
         </SectionCard>
 
-      {/* NUMBER OF BATCH + SKIP EXISTING
-          Both are left at their defaults on nearly every run, so they are
-          collapsed. The badge reports how many of them currently differ from
-          the default, which keeps a non-default core count or a skipped
-          extraction visible without expanding the section. */}
+      {/* NUMBER OF BATCH + SKIP EXISTING */}
       <Disclosure
         title="Advanced"
         modifiedCount={(selectedNBatch !== DEFAULT_N_CORES ? 1 : 0) + (skipExisting ? 1 : 0)}
       >
-        {/* `bare`: no surface, so the Disclosure does not draw a card inside a
-            card. These still line up with the cards outside it, because
-            Disclosure's body padding uses the same --med-card-padding token. */}
         <SectionCard
           row
-          bare
           align="center"
           title="Cores"
           hint="Number of CPU cores used for the parallel extraction of features."
@@ -794,11 +771,9 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
 
         <SectionCard
           row
-          bare
           align="center"
           title="Skip existing extractions"
           hint="Skip any scan whose features are already present in the save folder."
-          docHref={MEDIML_DOCS.batchExtractor}
         >
           <InputSwitch
             checked={skipExisting}

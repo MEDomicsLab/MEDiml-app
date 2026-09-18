@@ -25,12 +25,15 @@
 .infoToggle {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.35rem;
   border: 1px solid var(--med-border-subtle);
   background: var(--med-surface-sunken);
   color: var(--med-text-secondary);
   border-radius: var(--med-radius-pill);
-  padding: 0 var(--med-space-2);
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
   font-size: var(--med-text-xs);
   line-height: 1.7;
   cursor: pointer;
@@ -44,6 +47,9 @@
 }
 
 .infoToggle[aria-expanded="true"] {
+  width: auto;
+  height: auto;
+  padding: 0 var(--med-space-2);
   border-color: var(--med-accent);
   color: var(--med-text-primary);
 }

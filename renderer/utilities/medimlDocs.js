@@ -11,6 +11,7 @@ const BASE = "https://mediml.readthedocs.io/en/latest"
 
 export const MEDIML_DOCS = {
   // Data in
+  inputData: `${BASE}/input_data.html`,
   inputDataDicom: `${BASE}/input_data.html#dicom`,
   inputDataNifti: `${BASE}/input_data.html#nifti`,
   roiCsv: `${BASE}/csv_file.html`,
