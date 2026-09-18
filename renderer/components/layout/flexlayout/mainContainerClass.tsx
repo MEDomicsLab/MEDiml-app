@@ -21,12 +21,12 @@ import {
   TabSetNode
 } from "flexlayout-react"
 import fs from "fs"
+import { Braces, BrainCircuit, Briefcase, Component, File, FileCode, FileCode2, FileImage, FileJson, FileSpreadsheet, FileText, Layers, Pickaxe, SquareArrowRightExit, SquareTerminal } from "lucide-react"
 import Image from "next/image"
 import { confirmDialog } from "primereact/confirmdialog"
 import * as Prism from "prismjs"
 import "prismjs/themes/prism-coy.css"
 import * as React from "react"
-import * as Icons from "react-bootstrap-icons"
 import Iframe from "react-iframe"
 import { toast } from "react-toastify"
 import { getPathSeparator, loadCSVFromPath, loadJSONFromPath, loadJsonPath, loadXLSXFromPath } from "../../../utilities/fileManagementUtils"
@@ -52,7 +52,6 @@ import { showPopup } from "./popupMenu"
 import { TabStorage } from "./tabStorage"
 import { Utils } from "./utils"
 import ZoomPanPinchComponent from "./zoomPanPinchComponent"
-import { Braces, BrainCircuit, Briefcase, Component, Layers, Pickaxe, SquareArrowRightExit, SquareTerminal } from "lucide-react"
 
 var fields = ["Name", "Field1", "Field2", "Field3", "Field4", "Field5"]
 
@@ -946,36 +945,33 @@ class MainInnerContainer extends React.Component<any, { layoutFile: string | nul
    */
   returnIconFromComponent(component: string, config?: any) {
     if (config !== undefined && config !== null && config !== "" && config?.path !== undefined && config?.path !== null && config?.path !== "") {
-      let extension = config.path.split(".").pop()
-      let iconToReturn = null
       switch (extension) {
         case "csv":
-          return <Icons.FiletypeCsv />
+          return <FileSpreadsheet style={{ marginRight: 3 }} size={16} />
         case "json":
-          return <Icons.FiletypeJson />
+          return <FileJson style={{ marginRight: 3 }} size={16} />
         case "txt":
-          return <Icons.FiletypeTxt />
+          return <FileText style={{ marginRight: 3 }} size={16} />
         case "pdf":
-          return <Icons.FiletypePdf />
+          return <File style={{ marginRight: 3 }} size={16} />
         case "png":
-          return <Icons.FiletypePng />
+          return <FileImage style={{ marginRight: 3 }} size={16} />
         case "jpg":
-          return <Icons.FiletypeJpg />
+          return <FileImage style={{ marginRight: 3 }} size={16} />
         case "jpeg":
-          return <Icons.FiletypeJpg />
+          return <FileImage style={{ marginRight: 3 }} size={16} />
         case "py":
-          return <Icons.FiletypePy />
+          return <FileCode style={{ marginRight: 3 }} size={16} />
         case "ipynb":
-          return <Icons.FiletypePy />
+          return <FileCode style={{ marginRight: 3 }} size={16} />
         case "html":
-          return <Icons.FiletypeHtml />
+          return <FileCode2 style={{ marginRight: 3 }} size={16} />
         case "xlsx":
-          return <Icons.FiletypeXlsx />
+          return <FileSpreadsheet style={{ marginRight: 3 }} size={16} />
         case "xls":
-          return <Icons.FiletypeXls />
+          return <FileSpreadsheet style={{ marginRight: 3 }} size={16} />
       }
-      let icon = <span style={{ marginRight: 3 }}>{iconToReturn}</span>
-      return icon
+      return null
     } else {
       if (component === "InputToolsDB" || component === "inputPage" || component === "dataTableFromDB") {
         return <span style={{ marginRight: 3 }}>🛢️</span>

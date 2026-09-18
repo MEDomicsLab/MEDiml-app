@@ -1,17 +1,16 @@
 /* eslint-disable no-undef */
 /* eslint-disable no-unused-vars */
-import * as React from "react"
-import { Button } from "primereact/button"
 import { Collapse, Divider, HotkeysTarget2, Intent, Menu, MenuItem } from "@blueprintjs/core"
-import xlxs from "xlsx"
 import { Column, ColumnHeaderCell, CopyCellsMenuItem, EditableCell2, EditableName, MenuContext, Table2, Utils } from "@blueprintjs/table"
+import { ChevronRight, FileJson, FileSpreadsheet, Save } from "lucide-react"
+import { Button } from "primereact/button"
+import * as React from "react"
 import { Stack } from "react-bootstrap"
-import { ChevronRight, FiletypeCsv, FiletypeJson, FiletypeXlsx } from "react-bootstrap-icons"
-import { PiFloppyDisk } from "react-icons/pi"
 import { toast } from "react-toastify"
+import xlxs from "xlsx"
 import { DataFrame, Utils as danfoUtils } from "../../utilities/danfo.js"
-import { DataTablePopoverBP } from "./dataTablePopoverBPClass"
 import { deepCopy } from "../../utilities/staticFunctions"
+import { DataTablePopoverBP } from "./dataTablePopoverBPClass"
 
 const dfd = require("../../utilities/danfo.js")
 const dfUtils = new danfoUtils()
@@ -791,7 +790,7 @@ export class DataTableWrapperBPClass extends React.PureComponent<{}, {}> {
                 onClick={(e) => {
                   this.saveData(e, data)
                 }}
-                icon={<PiFloppyDisk size={"1.5rem"} />}
+                icon={<Save size={"1.5rem"} />}
                 rounded
                 className="p-button-secondary ms-auto"
                 style={{ marginTop: "5px", marginBottom: "5px", padding: "0rem", height: "2.5rem", width: "2.5rem" }}
@@ -801,7 +800,7 @@ export class DataTableWrapperBPClass extends React.PureComponent<{}, {}> {
                 onClick={(e) => {
                   this.exportToCSV(e, data)
                 }}
-                icon={<FiletypeCsv size={"1.5rem"} />}
+                icon={<FileSpreadsheet size={"1.5rem"} />}
                 rounded
                 className="p-button-secondary ms-auto"
                 style={{ marginTop: "5px", marginBottom: "5px", padding: "0rem", height: "2.5rem", width: "2.5rem" }}
@@ -811,7 +810,7 @@ export class DataTableWrapperBPClass extends React.PureComponent<{}, {}> {
                 onClick={(e) => {
                   this.exportToJSON(e, data)
                 }}
-                icon={<FiletypeJson size={"1.5rem"} />}
+                icon={<FileJson size={"1.5rem"} />}
                 rounded
                 className="p-button-info"
                 style={{ marginTop: "5px", marginBottom: "5px", padding: "0rem", height: "2.5rem", width: "2.5rem" }}
@@ -821,7 +820,7 @@ export class DataTableWrapperBPClass extends React.PureComponent<{}, {}> {
                 onClick={(e) => {
                   this.exportToExcel(e, data)
                 }}
-                icon={<FiletypeXlsx size={"1.5rem"} />}
+                icon={<FileSpreadsheet size={"1.5rem"} />}
                 rounded
                 className="p-button-success"
                 style={{ marginTop: "5px", marginBottom: "5px", padding: "0rem", height: "2.5rem", width: "2.5rem" }}
