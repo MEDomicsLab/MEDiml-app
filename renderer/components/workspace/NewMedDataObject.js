@@ -4,6 +4,7 @@ import path from "path"
 import { toast } from "react-toastify"
 import { getPathSeparator } from "../../utilities/fileManagementUtils"
 import { medDataStore } from "./medDataStore"
+import { getDb } from "./data/MongoConnection"
 import {
   addChildToParent,
   deleteMEDDataObject,
@@ -665,13 +666,42 @@ export class MEDDataObject {
   }
 
   /**
-   * @description Notifies the app that the in-memory dict was just patched in place by a targeted
-   * mutation (rename/move/delete/copy/lock/...), so it should re-render. touchAll() only forces a
-   * refresh of the compatibility-shim consumers (see dataContext.jsx/useGlobalDataCompat) - it is
-   * not a full workspace rescan. Once these mutators call medDataStore.patch/move/remove directly
-   * instead of mutating dict fields in place, this coarse-grained refresh won't be needed for them.
+   * @description Notifies the app that workspace data changed. touchAll() immediately re-renders
+   * consumers of objects that were patched in place (rename/move/lock/...); the DB reload then
+   * brings in objects that exist only in MongoDB so far (e.g. freshly created scenes, which have
+   * no files on disk for the workspace watcher to pick up).
    */
   static updateWorkspaceDataObject() {
     medDataStore.touchAll()
+    reloadStoreFromDb()
   }
+}
+
+let reloadInFlight = null
+let reloadQueued = false
+
+// Coalesces bursts of calls (scene creation fires several) into at most one extra DB read.
+function reloadStoreFromDb() {
+  if (reloadInFlight) {
+    reloadQueued = true
+    return reloadInFlight
+  }
+  reloadInFlight = (async () => {
+    try {
+      const db = await getDb()
+      const docs = await db.collection("medDataObjects").find({}).toArray()
+      const dict = {}
+      for (const doc of docs) dict[doc.id] = new MEDDataObject(doc)
+      medDataStore.reconcile(dict)
+    } catch (err) {
+      console.error("Failed to reload workspace data from the database:", err)
+    } finally {
+      reloadInFlight = null
+      if (reloadQueued) {
+        reloadQueued = false
+        reloadStoreFromDb()
+      }
+    }
+  })()
+  return reloadInFlight
 }

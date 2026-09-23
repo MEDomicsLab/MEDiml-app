@@ -435,6 +435,15 @@ if (isProd) {
       }) // Sends the folder structure to Next.js
     } else if (data === "requestAppExit") {
       app.exit()
+    } else if (data === "updateWorkingDirectory") {
+      // Explicit full rescan (sidebar Refresh button) - same payload the workspace watcher sends.
+      if (hasBeenSet) {
+        event.reply("updateDirectory", {
+          workingDirectory: dirTree(app.getPath("sessionData"), { exclude: WORKSPACE_SCAN_EXCLUDES }),
+          hasBeenSet: hasBeenSet,
+          newPort: serverPort
+        })
+      }
     }
   })
 

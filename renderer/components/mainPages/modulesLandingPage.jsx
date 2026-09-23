@@ -9,8 +9,8 @@ import { sceneDescription as extractionMEDimlSceneDescription } from "../../publ
 import { sceneDescription as learningMEDimlDefaultSettings } from "../../public/setupVariables/learningMEDimlNodesParams"
 import { LayoutModelContext } from "../layout/layoutContext"
 import { insertMEDDataObjectIfNotExists } from "../mongoDB/mongoDBUtils"
-import { useMEDDataObject, useMEDDataStore } from "../workspace/useMEDData"
 import { MEDDataObject } from "../workspace/NewMedDataObject"
+import { useMEDDataObject, useMEDDataStore } from "../workspace/useMEDData"
 import ModuleLandingShell, { ModuleGuideText } from "./moduleBasics/ModuleLandingShell"
 
 // Variable used to store some modularity information about the module
@@ -242,12 +242,6 @@ export default function ModulesLandingPage() {
     MEDDataObject.updateWorkspaceDataObject()
 
     setPendingOpenId(sceneObjectId || sceneId)
-  }
-
-  function choosePage(event, name) {
-    event.stopPropagation()
-    console.log(`Double clicked ${name}`, event, `open${name}Module`)
-    dispatchLayout({ type: `open${name}Module`, payload: { pageId: name } })
   }
 
   const onNameExtChange = (e) => {
