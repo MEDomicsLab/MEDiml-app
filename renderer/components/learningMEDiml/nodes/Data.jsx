@@ -1,10 +1,10 @@
 import { Dropdown } from "primereact/dropdown"
 import { MultiSelect } from 'primereact/multiselect'
-import React, { useContext, useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { Alert, Col, Form, Row } from "react-bootstrap"
 import { toast } from 'react-toastify'
 import Node, { updateHasWarning } from "../../flow/node"
-import { DataContext } from "../../workspace/dataContext"
+import { useMEDDataObjectsByType, useMEDDataStore } from "../../workspace/useMEDData"
 import { set } from "lodash"
 import Caption from '../../primitives/Caption'
 import { sectionCardClass } from '../../primitives/SectionCard'
@@ -25,7 +25,10 @@ const Data = ({ id, data, type }) => {
   const [selectedFolder, setSelectedFolder] = useState("") // Selected folder
   const [listWSFolders, setListWSFolders] = useState([]) // List of folders in the workspace
   const [listCSVFiles, setListCSVFiles] = useState([]) // List of csv files in the workspace
-  const { globalData } = useContext(DataContext) // We get the global data from the context
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
+  // Re-run updateWSfolder only when the set of directories/csv files actually changes, instead of
+  // on every unrelated workspace change.
+  const relevantIds = useMEDDataObjectsByType(["directory", "csv"])
   const sectionStyle = {
     marginBottom: "16px",
     paddingBottom: "12px",
@@ -50,9 +53,10 @@ const Data = ({ id, data, type }) => {
   
   useEffect(() => {
     updateWSfolder()
-  }, [globalData])
+  }, [relevantIds])
 
   const updateWSfolder = () => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let wsFolders = []
@@ -72,6 +76,7 @@ const Data = ({ id, data, type }) => {
 
   const handleSaveFolderChange = (directoryPath) => {
     setSelectedFolder(directoryPath)
+    const globalData = medDataStore.snapshot()
     let csvFiles = []
     let keys = Object.keys(globalData)
     let folderID = keys.filter(key => globalData[key].path === directoryPath)

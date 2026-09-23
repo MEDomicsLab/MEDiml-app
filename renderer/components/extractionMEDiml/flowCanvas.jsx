@@ -36,11 +36,10 @@ import { Button } from 'primereact/button'
 import { OverlayPanel } from 'primereact/overlaypanel'
 import { SelectButton } from "primereact/selectbutton"
 import { useRef } from "react"
-import { getCollectionData } from "../dbComponents/utils"
 import { FlowInfosContext } from "../flow/context/flowInfosContext"
 import { PageInfosContext } from "../mainPages/moduleBasics/pageInfosContext"
-import { overwriteMEDDataObjectContent } from "../mongoDB/mongoDBUtils"
-import { DataContext } from "../workspace/dataContext"
+import { getCollectionData, overwriteMEDDataObjectContent } from "../mongoDB/mongoDBUtils"
+import { useMEDDataStore } from "../workspace/useMEDData"
 import { MEDDataObject } from "../workspace/NewMedDataObject"
 
 // Static nodes parameters
@@ -72,7 +71,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
   const { setCanRun } = useContext(FlowInfosContext)
   const { workspace, port } = useContext(WorkspaceContext)
   const { setError, setShowError } = useContext(ErrorRequestContext)
-  const { globalData } = useContext(DataContext)
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
   const { pageId } = useContext(PageInfosContext) // used to get the page infos such as id and config path
   const op = useRef(null)
   const modalities = [{ name: "MR" }, { name: "CT" }, { name: "PET" }]
@@ -224,6 +223,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
   useEffect(() => {
     async function getConfig() {
       // Get Config file
+      const globalData = medDataStore.snapshot()
       if (globalData[pageId]?.childrenIDs) {
         let configToLoad = MEDDataObject.getChildIDWithName(globalData, pageId, "metadata.json")
         setMetadataFileID(configToLoad)

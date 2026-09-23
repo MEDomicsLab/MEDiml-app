@@ -15,10 +15,15 @@ import {
   installRequiredPythonPackages
 } from "./utils/pythonEnv"
 import { installMongoDB, checkRequirements } from "./utils/installation"
+import { startWorkspaceWatcher, stopWorkspaceWatcher } from "./utils/workspaceWatcher"
 const fs = require("fs")
 var path = require("path")
 let mongoProcess = null
 const dirTree = require("directory-tree")
+// The embedded MongoDB instance writes its data files under .mediml/MongoDBdata inside the
+// workspace, so a workspace scan must not walk into it (it would ship the DB's own storage
+// files over IPC and needlessly slow every scan as the DB grows).
+const WORKSPACE_SCAN_EXCLUDES = [/[\\/]\.mediml([\\/]|$)/, /[\\/]node_modules([\\/]|$)/, /[\\/]\.git([\\/]|$)/]
 const { exec, spawn, execSync } = require("child_process")
 let serverProcess = null
 const serverState = { serverIsRunning: false }
@@ -240,8 +245,21 @@ if (isProd) {
       }
       // Start MongoDB with the new configuration
       startMongoDB(data, mongoProcess)
+      // Watch the new workspace for changes made outside the app (an external editor, a script,
+      // a git checkout, ...) and ask the renderer to refresh when they happen.
+      startWorkspaceWatcher(
+        data,
+        () => {
+          mainWindow?.webContents.send("updateDirectory", {
+            workingDirectory: dirTree(app.getPath("sessionData"), { exclude: WORKSPACE_SCAN_EXCLUDES }),
+            hasBeenSet: hasBeenSet,
+            newPort: serverPort
+          })
+        },
+        WORKSPACE_SCAN_EXCLUDES
+      )
       return {
-        workingDirectory: dirTree(app.getPath("sessionData")),
+        workingDirectory: dirTree(app.getPath("sessionData"), { exclude: WORKSPACE_SCAN_EXCLUDES }),
         hasBeenSet: hasBeenSet,
         newPort: serverPort
       }
@@ -411,12 +429,6 @@ if (isProd) {
     } else if (data === "getRecentWorkspaces") {
       let recentWorkspaces = loadWorkspaces()
       event.reply("recentWorkspaces", recentWorkspaces)
-    } else if (data === "updateWorkingDirectory") {
-      event.reply("updateDirectory", {
-        workingDirectory: dirTree(app.getPath("sessionData")),
-        hasBeenSet: hasBeenSet,
-        newPort: serverPort
-      }) // Sends the folder structure to Next.js
     } else if (data === "getServerPort") {
       event.reply("getServerPort", {
         newPort: serverPort
@@ -525,6 +537,13 @@ app.on("before-quit", async (event) => {
     terminalManager.cleanup()
   }
   
+  // Stop the workspace filesystem watcher
+  try {
+    await stopWorkspaceWatcher()
+  } catch (error) {
+    console.warn("Error stopping workspace watcher:", error)
+  }
+
   // Stop MongoDB
   try {
     await stopMongoDB(mongoProcess)

@@ -5,10 +5,9 @@ import { toast } from "react-toastify"
 import uuid from "react-native-uuid"
 import { loadJsonSync, processBatchSettings } from "../../utilities/fileManagementUtils.js"
 import { requestBackend } from "../../utilities/requests.js"
-import { getCollectionData } from "../dbComponents/utils.js"
 import { updateHasWarning } from "../flow/node.jsx"
 import ProgressBarRequests from "../generalPurpose/progressBarRequests.jsx"
-import { overwriteMEDDataObjectContent } from "../mongoDB/mongoDBUtils.js"
+import { getCollectionData, overwriteMEDDataObjectContent } from "../mongoDB/mongoDBUtils.js"
 
 
 // Workflow imports
@@ -20,7 +19,7 @@ import WorkflowBase from "../flow/workflowBase.jsx"
 import { ErrorRequestContext } from "../generalPurpose/errorRequestContext.jsx"
 import { PageInfosContext } from "../mainPages/moduleBasics/pageInfosContext.jsx"
 import { MEDDataObject } from "../workspace/NewMedDataObject.js"
-import { DataContext } from "../workspace/dataContext.jsx"
+import { useMEDDataStore } from "../workspace/useMEDData.js"
 import { WorkspaceContext } from "../workspace/workspaceContext.jsx"
 
 // Import node types
@@ -75,7 +74,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
   const { setIsResults, isResults, setShowResultsPane, updateFlowResults } = useContext(FlowResultsContext)
   const { canRun, setSceneName } = useContext(FlowInfosContext) // used to get the flow infos
   const { groupNodeId, changeSubFlow, updateNode } = useContext(FlowFunctionsContext)
-  const { globalData } = useContext(DataContext)
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
   const { port } = useContext(WorkspaceContext)
   const { setError, setShowError } = useContext(ErrorRequestContext) // used to get the flow infos
   const op = useRef(null);
@@ -144,6 +143,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
   useEffect(() => {
     async function getConfig() {
       // Get Config file
+      const globalData = medDataStore.snapshot()
       if (globalData[pageId]?.childrenIDs) {
         let configToLoad = MEDDataObject.getChildIDWithName(globalData, pageId, "metadata.json")
         setMetadataFileID(configToLoad)

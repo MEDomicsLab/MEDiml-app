@@ -2,10 +2,10 @@ import { Dropdown } from 'primereact/dropdown';
 import { InputNumber } from 'primereact/inputnumber';
 import { InputSwitch } from 'primereact/inputswitch';
 import { InputText } from 'primereact/inputtext';
-import { useContext, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Col, Form, Row } from "react-bootstrap";
 import Node, { updateHasWarning } from "../../flow/node";
-import { DataContext } from "../../workspace/dataContext";
+import { useMEDDataObjectsByType, useMEDDataStore } from "../../workspace/useMEDData";
 import Caption from '../../primitives/Caption'
 import { sectionCardClass } from '../../primitives/SectionCard'
 
@@ -27,7 +27,10 @@ const Split = ({ id, data, type }) => {
   const [listCSVFiles, setListCSVFiles] = useState([]) // List of csv files in the workspace
   const [listWSFolders, setListWSFolders] = useState([]) // List of folders in the workspace
   const [reload, setReload] = useState(false)
-  const { globalData } = useContext(DataContext) // We get the global data from the context
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
+  // Re-run the folder/csv list updates only when the set of directories/csv files actually
+  // changes, instead of on every unrelated workspace change.
+  const relevantIds = useMEDDataObjectsByType(["directory", "csv"])
   const sectionStyle = {
     marginBottom: "16px",
     paddingBottom: "12px",
@@ -58,9 +61,10 @@ const Split = ({ id, data, type }) => {
   useEffect(() => {
     updateWSfolder()
     updateCSVFilesList()
-  }, [globalData])
+  }, [relevantIds])
 
   const updateWSfolder = () => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let wsFolders = []
@@ -74,6 +78,7 @@ const Split = ({ id, data, type }) => {
   }
 
   const updateCSVFilesList = () => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let csvFiles = []

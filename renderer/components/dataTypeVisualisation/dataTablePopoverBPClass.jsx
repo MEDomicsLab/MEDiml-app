@@ -1,9 +1,9 @@
-import React, { useContext, useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { Button, Popover, Menu, MenuItem, InputGroup } from "@blueprintjs/core"
 import { Select } from "@blueprintjs/select"
 import { Tag } from "lucide-react"
 import { Stack } from "react-bootstrap"
-import { DataContext } from "../workspace/dataContext"
+import { useMEDDataObject, useMEDDataStore } from "../workspace/useMEDData"
 import { Utils as danfoUtils } from "../../utilities/danfo.js"
 import { deepCopy } from "../../utilities/staticFunctions"
 import { Chip } from "primereact/chip"
@@ -59,7 +59,7 @@ const DataTablePopoverBP = (props) => {
 
   const getColumnNameFromIndex = (index) => {
     // To get the column name from the index
-    let medObject = globalData[props.config.uuid]
+    let medObject = medDataStore.get(props.config.uuid)
     if (medObject) {
       let df = medObject.metadata.columns
       let colName = df[index]
@@ -68,7 +68,10 @@ const DataTablePopoverBP = (props) => {
     return ""
   }
 
-  const { globalData, setGlobalData } = useContext(DataContext) // The global data object
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
+  // Re-renders only when this specific object changes - used below to know when to re-derive
+  // columnName/selectedType/tags, instead of on every unrelated workspace change.
+  const medObject = useMEDDataObject(props.config.uuid)
   const [columnName, setColumnName] = useState(props.columnName) // The name of the column
   const [selectedType, setSelectedType] = useState(getTypeInGlobalData()) // The selected data type
   const [tags, setTags] = useState([]) // The tags for the string data type
@@ -89,24 +92,24 @@ const DataTablePopoverBP = (props) => {
    * @returns {Void}
    */
   const changeTypeInGlobalData = (type) => {
-    let globalDataCopy = { ...globalData }
-    if (globalDataCopy[props.config.uuid]) {
-      if (globalDataCopy[props.config.uuid].metadata.columnsInfo) {
-        if (globalDataCopy[props.config.uuid].metadata.columnsInfo[columnName]) {
-          globalDataCopy[props.config.uuid].metadata.columnsInfo[columnName].dataType = type
+    let medObject = medDataStore.get(props.config.uuid)
+    if (medObject) {
+      if (medObject.metadata.columnsInfo) {
+        if (medObject.metadata.columnsInfo[columnName]) {
+          medObject.metadata.columnsInfo[columnName].dataType = type
         } else {
-          globalDataCopy[props.config.uuid].metadata.columnsInfo[columnName] = {
+          medObject.metadata.columnsInfo[columnName] = {
             dataType: type
           }
         }
       } else {
-        globalDataCopy[props.config.uuid].metadata.columnsInfo = {
+        medObject.metadata.columnsInfo = {
           [columnName]: {
             dataType: type
           }
         }
       }
-      setGlobalData(globalDataCopy)
+      medDataStore.touch(props.config.uuid)
     }
   }
 
@@ -115,7 +118,7 @@ const DataTablePopoverBP = (props) => {
    * @returns {String} - The data type of the column
    */
   function getTypeInGlobalData() {
-    let medObject = globalData[props.config.uuid]
+    let medObject = medDataStore.get(props.config.uuid)
     if (medObject) {
       if (medObject.metadata.columnsInfo) {
         if (medObject.metadata.columnsInfo[columnName]) {
@@ -131,7 +134,7 @@ const DataTablePopoverBP = (props) => {
    * @returns {Array} - The array of unique values
    */
   function getUniqueValues() {
-    let medObject = globalData[props.config.uuid]
+    let medObject = medDataStore.get(props.config.uuid)
     if (medObject) {
       let df = medObject.data
       let colName = columnName
@@ -147,19 +150,18 @@ const DataTablePopoverBP = (props) => {
     return []
   }
 
-  /** Hook called when the global data changes to get the registered name of the column in global data */
+  /** Hook called when this object changes to get the registered name of the column in global data */
   useEffect(() => {
     let name = getColumnNameFromIndex(props.getReorderedIndex(props.index))
     setColumnName(name)
-  }, [globalData])
+  }, [medObject])
 
   /**
    * To set the selected type to the type of the column if it is already present in the global data object
    * @returns {Void}
    */
   useEffect(() => {
-    let medObject = globalData[props.config.uuid]
-    let globalDataCopy = { ...globalData }
+    let medObject = medDataStore.get(props.config.uuid)
     if (medObject) {
       if (medObject.metadata.columnsInfo) {
         if (medObject.metadata.columnsInfo[columnName]) {
@@ -168,19 +170,19 @@ const DataTablePopoverBP = (props) => {
             if (Object.keys(selectedIcon).includes(type)) {
               setSelectedType(medObject.metadata.columnsInfo[columnName].dataType)
             } else {
-              globalDataCopy[props.config.uuid].metadata.columnsInfo[columnName].dataType = getTypeFromInferedDtype(props.category[0])
+              medObject.metadata.columnsInfo[columnName].dataType = getTypeFromInferedDtype(props.category[0])
               setSelectedType(getTypeFromInferedDtype(props.category[0]))
-              setGlobalData(globalDataCopy)
+              medDataStore.touch(props.config.uuid)
             }
           }
         }
       } else {
-        globalDataCopy[props.config.uuid].metadata.columnsInfo = {
+        medObject.metadata.columnsInfo = {
           [columnName]: {
             dataType: getTypeFromInferedDtype(props.category[0])
           }
         }
-        setGlobalData(globalDataCopy)
+        medDataStore.touch(props.config.uuid)
       }
     } else {
       // NO OP
@@ -193,9 +195,9 @@ const DataTablePopoverBP = (props) => {
     setColumnName(name) // Set the name of the column
 
     setSelectedType(getTypeInGlobalData()) // Set the selected type to the type of the column
-    let globalDataCopy = { ...globalData }
-    if (globalDataCopy[props.config.uuid]) {
-      let tags = globalDataCopy[props.config.uuid].getColumnsTag()
+    let medObjectForTags = medDataStore.get(props.config.uuid)
+    if (medObjectForTags) {
+      let tags = medObjectForTags.getColumnsTag()
       if (tags) {
         let tagsDict = tags.tagsDict
         let columnsTag = tags.columnsTag

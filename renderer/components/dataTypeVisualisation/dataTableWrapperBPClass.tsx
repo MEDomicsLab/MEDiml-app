@@ -10,6 +10,7 @@ import { toast } from "react-toastify"
 import xlxs from "xlsx"
 import { DataFrame, Utils as danfoUtils } from "../../utilities/danfo.js"
 import { deepCopy } from "../../utilities/staticFunctions"
+import { medDataStore } from "../workspace/medDataStore"
 import { DataTablePopoverBP } from "./dataTablePopoverBPClass"
 
 const dfd = require("../../utilities/danfo.js")
@@ -623,7 +624,7 @@ export class DataTableWrapperBPClass extends React.PureComponent<{}, {}> {
     })
     df.rename(columnsRenamingMap, { inplace: true })
     // Rename the metadata
-    let globalDataCopy = { ...this.props.globalData }
+    let globalDataCopy = { ...medDataStore.snapshot() }
     let medObject = globalDataCopy[this.props.config.uuid]
     medObject.setData(df)
     Object.keys(columnsRenamingMap).forEach((key) => {
@@ -644,7 +645,7 @@ export class DataTableWrapperBPClass extends React.PureComponent<{}, {}> {
     })
     console.log("globalDataCopy", globalDataCopy, this.props)
     globalDataCopy[this.props.config.uuid] = medObject
-    this.props.setGlobalData(globalDataCopy)
+    medDataStore.reconcile(globalDataCopy)
   }
 
   /**
@@ -653,7 +654,7 @@ export class DataTableWrapperBPClass extends React.PureComponent<{}, {}> {
    * @returns dataframe - dataframe with the new column names
    */
   private addTagsToData = (df: DataFrame) => {
-    let tags = this.props.globalData[this.props.config.uuid].getColumnsTag()
+    let tags = medDataStore.get(this.props.config.uuid).getColumnsTag()
     let tagsDict = tags.tagsDict
     let columnsTag = tags.columnsTag
     let columnsNames = df.$columns

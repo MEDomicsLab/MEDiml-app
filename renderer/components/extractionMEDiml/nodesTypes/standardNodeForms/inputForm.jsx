@@ -5,7 +5,7 @@ import { Card, Col, Form, Row } from "react-bootstrap"
 import { toast } from "react-toastify"
 import { requestBackend } from "../../../../utilities/requests"
 import { ErrorRequestContext } from "../../../generalPurpose/errorRequestContext"
-import { DataContext } from "../../../workspace/dataContext"
+import { useMEDDataStore } from "../../../workspace/useMEDData"
 import { WorkspaceContext } from "../../../workspace/workspaceContext"
 import DocLink from "../../docLink"
 
@@ -27,7 +27,7 @@ const InputForm = ({ nodeForm, changeNodeForm, enableView }) => {
   const [loading, setLoading] = useState(false)
   const { workspace, port } = useContext(WorkspaceContext)
   const { setError, setShowError } = useContext(ErrorRequestContext)
-  const { globalData } = useContext(DataContext) // We get the global data from the context
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
   const pageId = "extractionMEDiml" // pageId is used to identify the page in the backend
 
   const areListsIdentical = (listA, listB) => {
@@ -35,6 +35,7 @@ const InputForm = ({ nodeForm, changeNodeForm, enableView }) => {
   }
 
   useEffect(() => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let npyFiles = []

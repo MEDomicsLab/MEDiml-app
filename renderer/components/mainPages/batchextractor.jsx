@@ -16,7 +16,7 @@ import Caption from '../primitives/Caption'
 import Disclosure from '../primitives/Disclosure'
 import SectionCard from '../primitives/SectionCard'
 import Toolbar from '../primitives/Toolbar'
-import { DataContext } from '../workspace/dataContext'
+import { useMEDDataObjectsByType, useMEDDataStore } from '../workspace/useMEDData'
 import { MEDDataObject } from '../workspace/NewMedDataObject'
 import { WorkspaceContext } from "../workspace/workspaceContext"
 import SettingsEditor from "./dataComponents/settingsEditor"
@@ -59,7 +59,10 @@ const DEFAULT_N_CORES = 12
 
 const BatchExtractor = ({ pageId, configPath = "" }) => {
   const { port } = useContext(WorkspaceContext) // Get the port of the backend
-  const { globalData } = useContext(DataContext) // Get the global data of the workspace
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
+  // Re-run the folder/csv/settings list updates only when the set of relevant files actually
+  // changes, instead of on every unrelated workspace change.
+  const relevantIds = useMEDDataObjectsByType(["directory", "csv", "json"])
   const { setError } = useContext(ErrorRequestContext) // Get the function to set the error request
   const [progress, setProgress] = useState(0)
   const [loadingEdit, setLoadingEdit] = useState(false)
@@ -97,9 +100,10 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
     updateWSfolder()
     updateCSVFilesList()
     updateSettingsFilesList()
-  }, [globalData])
+  }, [relevantIds])
 
   const updateWSfolder = () => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let wsFolders = []
@@ -113,6 +117,7 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
   }
 
   const updateCSVFilesList = () => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let csvFiles = []
@@ -126,6 +131,7 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
   }
 
   const updateSettingsFilesList = () => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let settingsFiles = []

@@ -22,7 +22,7 @@ import Field from "../primitives/Field"
 import ParamGrid from "../primitives/ParamGrid"
 import SectionCard from "../primitives/SectionCard"
 import Toolbar from "../primitives/Toolbar"
-import { DataContext } from "../workspace/dataContext"
+import { useMEDDataObjectsByType, useMEDDataStore } from "../workspace/useMEDData"
 import { WorkspaceContext } from "../workspace/workspaceContext"
 
 /**
@@ -61,7 +61,10 @@ const PRECHECK_DATASET = {
 const DataManager = ({ pageId, configPath = "" }) => {
   const { port } = useContext(WorkspaceContext)
   const { setError, setShowError } = useContext(ErrorRequestContext)
-  const { globalData } = useContext(DataContext) // Get the workspace data
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
+  // Re-run the folder/csv list updates only when the set of directories/csv files actually
+  // changes, instead of on every unrelated workspace change.
+  const relevantIds = useMEDDataObjectsByType(["directory", "csv"])
   const [progress, setProgress] = useState(0)
   const [open, setOpen] = useState(false)
   const [refreshEnabled, setRefreshEnabled] = useState(false) // A boolean variable to control refresh
@@ -104,9 +107,10 @@ const DataManager = ({ pageId, configPath = "" }) => {
   useEffect(() => {
     updateWSfolder()
     updateCSVFilesList()
-    }, [globalData])
+    }, [relevantIds])
 
   const updateWSfolder = () => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let wsFolders = []
@@ -120,6 +124,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
   }
 
   const updateCSVFilesList = () => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let csvFiles = []
