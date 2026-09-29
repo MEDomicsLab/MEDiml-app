@@ -62,7 +62,7 @@ class RadiomicsLearnerNode(LearningNode):
 
         model_name = context.learner_settings["model"]
         model_settings = context.learner_settings[model_name]
-        var_importance_threshold = model_settings["varImportanceThreshold"]
+        n_features_to_select = model_settings["nFeaturesToSelect"]
         optimize_threshold = model_settings.get("optimizeThreshold", True)
         finalize_model = model_settings.get("finalizeModel", True)
         optimization_metric = model_settings["optimizationMetric"]
@@ -75,7 +75,7 @@ class RadiomicsLearnerNode(LearningNode):
         estimator = MEDiml.learning.Estimator.Estimator(
             algorithm="xgboost",
             ml_config={
-                "var_importance_threshold": var_importance_threshold,
+                "n_features_to_select": n_features_to_select,
                 "optimize_threshold": optimize_threshold,
                 "optimization_metric": optimization_metric,
                 "use_gpu": use_gpu,
@@ -179,14 +179,14 @@ class RadiomicsLearnerNode(LearningNode):
                 "outcome_table_binary_holdout = outcome_table_binary.loc[patients_holdout, :] if evaluate_holdout else None",
                 "model_name = learner_settings['model']",
                 "model_settings = learner_settings[model_name]",
-                "var_importance_threshold = learner_settings[model_name]['varImportanceThreshold']",
+                "n_features_to_select = learner_settings[model_name]['nFeaturesToSelect']",
                 "optimize_threshold = model_settings.get('optimizeThreshold', True)",
                 "finalize_model = model_settings.get('finalizeModel', True)",
                 "optimization_metric = learner_settings[model_name]['optimizationMetric']",
                 "use_gpu = model_settings.get('use_gpu', False)",
                 "seed = learner_settings[model_name]['seed']",
                 "var_table_train = rad_tables_training.loc[patients_train, :]",
-                "estimator = MEDiml.learning.Estimator.Estimator(algorithm='xgboost', ml_config={'var_importance_threshold': var_importance_threshold, 'optimize_threshold': optimize_threshold, 'optimization_metric': optimization_metric, 'use_gpu': use_gpu, 'seed': seed})",
+                "estimator = MEDiml.learning.Estimator.Estimator(algorithm='xgboost', ml_config={'n_features_to_select': n_features_to_select, 'optimize_threshold': optimize_threshold, 'optimization_metric': optimization_metric, 'use_gpu': use_gpu, 'seed': seed})",
                 "estimator.fit(var_table_train, outcome_table_binary_train)",
                 "name_save_model = model_settings['nameSave']",
                 "model_id = f'{name_save_model}_var1'",

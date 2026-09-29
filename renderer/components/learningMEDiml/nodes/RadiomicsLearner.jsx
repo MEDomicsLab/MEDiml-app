@@ -5,8 +5,8 @@ import { InputText } from 'primereact/inputtext';
 import { useState } from 'react';
 import { Form, Row } from "react-bootstrap";
 import Node, { updateHasWarning } from "../../flow/node";
-import Caption from '../../primitives/Caption'
-import { sectionCardClass } from '../../primitives/SectionCard'
+import Caption from '../../primitives/Caption';
+import { sectionCardClass } from '../../primitives/SectionCard';
 
 
 /**
@@ -58,17 +58,17 @@ const RadiomicsLearner = ({ id, data, type }) => {
                 />
               </Form.Group>
 
-              {/* varImportanceThreshold */}
-              <Form.Group controlId="varImportanceThreshold" style={sectionStyle}>
-              <Form.Label className="varImportanceThreshold">Variable Importance Threshold</Form.Label>
+              {/* nFeaturesToSelect */}
+              <Form.Group controlId="nFeaturesToSelect" style={sectionStyle}>
+              <Form.Label className="nFeaturesToSelect">Variable Importance Threshold</Form.Label>
               <Caption>Higher threshold keeps fewer important variables in the model.</Caption>
                 <InputNumber
                     style={{width: "300px"}}
                     buttonLayout="horizontal"
-                    value={data.setupParam.possibleSettings.defaultSettings.XGBoost.varImportanceThreshold}
+                    value={data.setupParam.possibleSettings.defaultSettings.XGBoost.nFeaturesToSelect}
                     onValueChange={(event) => {
-                        data.setupParam.possibleSettings.defaultSettings.XGBoost.varImportanceThreshold = event.target.value;
-                        data.internal.settings.XGBoost.varImportanceThreshold = event.target.value;
+                        data.setupParam.possibleSettings.defaultSettings.XGBoost.nFeaturesToSelect = event.target.value;
+                        data.internal.settings.XGBoost.nFeaturesToSelect = event.target.value;
                         updateHasWarning(data);
                         setReload(!reload);
                     }}

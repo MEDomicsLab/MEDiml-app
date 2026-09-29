@@ -351,7 +351,7 @@
           "settings": {
             "model": "XGBoost",
             "XGBoost": {
-              "varImportanceThreshold": 0.3,
+              "nFeaturesToSelect": 0.3,
               "optimizeThreshold": true,
               "finalizeModel": true,
               "nameSave": "xgboost_5perc",
@@ -383,7 +383,7 @@
             "defaultSettings": {
               "model": "XGBoost",
               "XGBoost": {
-                "varImportanceThreshold": 0.3,
+                "nFeaturesToSelect": 0.3,
                 "optimizeThreshold": true,
                 "finalizeModel": true,
                 "nameSave": "xgboost_5perc",

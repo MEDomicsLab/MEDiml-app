@@ -35,7 +35,7 @@ const learningMEDimlDefaultSettings = {
   radiomics_learner : {
     model: "XGBoost",
     XGBoost: {
-      varImportanceThreshold: 0.3,
+      nFeaturesToSelect: 0.3,
       optimizeThreshold: true,
       finalizeModel: false,
       nameSave: "xgboost_thresh_opt",
