@@ -1,6 +1,6 @@
 /* eslint-disable no-unused-vars, no-case-declarations, camelcase */
-import { toast } from "react-toastify"
-import { getDb, resetConnection } from "../workspace/data/MongoConnection"
+import { toast } from "react-toastify";
+import { getDb, resetConnection } from "../workspace/data/MongoConnection";
 
 const fs = require("fs")
 const Papa = require("papaparse")
@@ -21,7 +21,7 @@ export async function connectToMongoDB() {
 
 // Re-exported so callers that need to force a reconnect (e.g. after switching workspaces) don't
 // need to import MongoConnection.js directly.
-export { resetConnection }
+export { resetConnection };
 
 /**
  * @description Update the name of a MEDDataObject specified by id in the DB
@@ -98,24 +98,6 @@ export async function insertMEDDataObjectIfNotExists(medData, path = null, jsonD
     }
     if (!medData.type || typeof medData.type !== 'string' || medData.type.trim() === '') {
       throw new Error('medData.type is required and must be a non-empty string', medData)
-    }
-
-    // Skip npy, DICOM, and NIfTI files
-    if (medData.type === "npy" || 
-      (path && path.endsWith(".npy")) || 
-      (path && path.endsWith(".dcm")) || 
-      (path && path.endsWith(".nii")) || 
-      (path && path.endsWith(".nii.gz"))
-    ) {
-      console.log(
-        `Skipping file: ${medData.name}` +
-        (medData.type
-          ? ` of type ${medData.type}`
-          : path
-            ? ` at path ${path}`
-            : '')
-      )
-      return null
     }
 
     const db = await connectToMongoDB()
@@ -196,53 +178,8 @@ export async function insertMEDDataObjectIfNotExists(medData, path = null, jsonD
           console.log(`Data inserted with ${result.insertedCount} documents`)
         }
       } else if (path) {
-        switch (medData.type) {
-          case "csv":
-            await insertCSVIntoCollection(path, medData.id)
-            break
-          case "html":
-            await insertHTMLIntoCollection(path, medData.id)
-            break
-          case "png":
-            await insertPNGIntoCollection(path, medData.id)
-            break
-          case "pkl":
-            await insertPKLIntoCollection(path, medData.id)
-            break
-          case "jpg":
-            await insertJPGIntoCollection(path, medData.id)
-            break
-          case "json":
-            // Check if file exists
-            const fs = require('fs').promises
-            try {
-              await fs.access(path)
-            } catch (err) {
-              console.error(`File at path ${path} does not exist or is not accessible:`, err)
-              throw new Error(`File not found: ${path}`)
-            }
-            
-            const fileContent = await fs.readFile(path, "utf8")
-            let jsonContent
-            try {
-              jsonContent = JSON.parse(fileContent)
-            } catch (err) {
-              console.error(`Error parsing JSON from ${path}:`, err)
-              throw new Error(`Invalid JSON in file: ${path}`)
-            }
-            
-            const dataCollection = db.collection(medData.id)
-            const docsToInsert = Array.isArray(jsonContent) ? jsonContent : [jsonContent]
-            const result = await dataCollection.insertMany(docsToInsert)
-            if (result.insertedCount === 0) {
-              console.error(`No JSON data inserted for MEDDataObject with id ${medData.id}`)
-              throw new Error(`Failed to insert JSON data for ${medData.id}`)
-            }
-            console.log(`Inserted ${result.insertedCount} JSON documents from file`)
-            break
-          default:
-            console.log(`No handler for type: ${medData.type}`)
-            break
+        if (await insertFileContent(path, medData.id, medData.type)) {
+          await recordContentMtime(medData.id, path)
         }
       } else if (copyId) {
         // Copy the data from the collection of the object being copied
@@ -295,6 +232,97 @@ export async function insertMEDDataObjectIfNotExists(medData, path = null, jsonD
     console.error(`Fatal error in insertMEDDataObjectIfNotExists:`, err)
     throw err
   }
+}
+
+/**
+ * @description Parses the file at `filePath` into the content collection named `id`, by type.
+ * @returns {Promise<Boolean>} false when the type has no content handler (nothing imported)
+ */
+async function insertFileContent(filePath, id, type) {
+  switch (type) {
+    case "csv":
+      await insertCSVIntoCollection(filePath, id)
+      return true
+    case "html":
+      await insertHTMLIntoCollection(filePath, id)
+      return true
+    case "png":
+      await insertPNGIntoCollection(filePath, id)
+      return true
+    case "pkl":
+      await insertPKLIntoCollection(filePath, id)
+      return true
+    case "jpg":
+      await insertJPGIntoCollection(filePath, id)
+      return true
+    case "json": {
+      let jsonContent
+      try {
+        jsonContent = JSON.parse(await fs.promises.readFile(filePath, "utf8"))
+      } catch (err) {
+        console.error(`Error reading JSON from ${filePath}:`, err)
+        throw new Error(`Invalid or unreadable JSON file: ${filePath}`)
+      }
+      const docsToInsert = Array.isArray(jsonContent) ? jsonContent : [jsonContent]
+      const db = await connectToMongoDB()
+      const result = await db.collection(id).insertMany(docsToInsert)
+      if (result.insertedCount === 0) {
+        throw new Error(`Failed to insert JSON data for ${id}`)
+      }
+      console.log(`Inserted ${result.insertedCount} JSON documents from file`)
+      return true
+    }
+    default:
+      console.log(`No handler for type: ${type}`)
+      return false
+  }
+}
+
+// The file's mtime at import time, so a later open can tell the collection is older than the file.
+async function recordContentMtime(id, filePath) {
+  const db = await connectToMongoDB()
+  await db.collection("medDataObjects").updateOne({ id }, { $set: { contentMtime: fs.statSync(filePath).mtimeMs } })
+}
+
+async function dropCollectionIfExists(id) {
+  const db = await connectToMongoDB()
+  if ((await db.listCollections({ name: id }).toArray()).length > 0) {
+    await db.collection(id).drop()
+  }
+}
+
+/**
+ * @description Imports a workspace file's content into MongoDB if it has no content collection yet
+ * (files that reach the workspace outside the dropzone are only synced as metadata).
+ * @returns {Promise<{imported: Boolean}>}
+ */
+export async function ensureContentCollection(id, filePath, type) {
+  if (await collectionExists(id)) return { imported: false }
+  try {
+    const imported = await insertFileContent(filePath, id, type)
+    if (imported) await recordContentMtime(id, filePath)
+    return { imported }
+  } catch (err) {
+    await dropCollectionIfExists(id).catch((dropErr) => console.error(`Could not drop partial collection ${id}:`, dropErr))
+    throw err
+  }
+}
+
+/** @description Replaces a file's content collection with a fresh import from disk. */
+export async function reimportFileContent(id, filePath, type) {
+  await dropCollectionIfExists(id)
+  return ensureContentCollection(id, filePath, type)
+}
+
+/**
+ * @description True when `filePath` was modified after its content was last imported. Objects
+ * imported before contentMtime existed are never considered stale.
+ */
+export async function isContentStale(id, filePath) {
+  const db = await connectToMongoDB()
+  const doc = await db.collection("medDataObjects").findOne({ id }, { projection: { contentMtime: 1 } })
+  if (!doc || doc.contentMtime == null) return false
+  return fs.statSync(filePath).mtimeMs > doc.contentMtime
 }
 
 /**
@@ -464,6 +492,13 @@ async function insertCSVIntoCollection(filePath, collectionName) {
               return cleanRow
             })
             
+            if (cleanedData.length === 0) {
+              // Empty or header-only CSV: insertMany rejects an empty batch, but the collection must
+              // still exist or the data table refuses to open the file.
+              await db.createCollection(collectionName)
+              resolve(null)
+              return
+            }
             const result = await collection.insertMany(cleanedData)
             console.log(`CSV data inserted with ${result.insertedCount} documents`)
             resolve(result)
