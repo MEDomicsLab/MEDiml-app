@@ -12,7 +12,9 @@ import {
   installPythonPackage,
   installBundledPythonExecutable,
   checkPythonRequirements,
-  installRequiredPythonPackages
+  installRequiredPythonPackages,
+  getMissingPythonRequirements,
+  installPythonRequirements
 } from "./utils/pythonEnv"
 import { installMongoDB, checkRequirements } from "./utils/installation"
 import { startWorkspaceWatcher, stopWorkspaceWatcher } from "./utils/workspaceWatcher"
@@ -514,6 +516,16 @@ ipcMain.handle("checkRequirements", async (event) => {
 
 ipcMain.handle("checkPythonRequirements", async (event) => {
   return checkPythonRequirements()
+})
+
+// Throws (rejecting the renderer's invoke) if the interpreter can't run, so the UI can tell
+// "could not check" apart from "nothing missing".
+ipcMain.handle("getMissingPythonRequirements", async (event, pythonPath) => {
+  return getMissingPythonRequirements(pythonPath)
+})
+
+ipcMain.handle("installMissingPythonRequirements", async (event, pythonPath, requirements) => {
+  return installPythonRequirements(mainWindow, pythonPath, requirements)
 })
 
 ipcMain.handle("checkMongoDBisInstalled", async (event) => {
