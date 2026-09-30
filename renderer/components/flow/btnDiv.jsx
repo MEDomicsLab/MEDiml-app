@@ -1,7 +1,6 @@
-import React from "react"
-import { Button } from "react-bootstrap"
+import { ArrowBigLeft, Download, FolderDown, Import, Play, Save, Square, Trash2 } from "lucide-react"
 import { Tooltip } from 'primereact/tooltip'
-import { ArrowBigLeft, Download, FolderDown, Import, Play, Save, Trash2 } from "lucide-react"
+import { Button } from "react-bootstrap"
 
 
 /**
@@ -101,6 +100,25 @@ const buttonType = {
         disabled={disabled}
         >
         <Play size={25} />
+      </Button>
+      </>
+    )
+  },
+  // Replaces the run button while a workflow is running
+  stop: (onStop, disabled = false) => {
+    return (
+      <>
+      <Tooltip key="stopTip" target=".stopBtn"/>
+      <Button
+        className="stopBtn"
+        key="stop"
+        data-pr-tooltip="Stop the running experiment"
+        data-pr-position="bottom"
+        variant="outline margin-left-10 padding-5"
+        onClick={onStop}
+        disabled={disabled}
+        >
+        <Square size={25} color="red" />
       </Button>
       </>
     )

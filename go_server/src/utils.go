@@ -15,8 +15,10 @@ import (
 )
 
 type ScriptInfo struct {
-	Cmd      *exec.Cmd
-	Progress string
+	Cmd       *exec.Cmd
+	Progress  string
+	Finished  bool // the process has exited
+	Cancelled bool // the process was stopped by the user (see KillScript)
 }
 
 var Mu sync.Mutex // guards balance
@@ -166,6 +168,8 @@ func StartPythonScripts(jsonParam string, filename string, id string) (string, e
 		Cmd:      exec.Command(condaEnv, "-u", script, "--json-param", jsonParam, "--id", id),
 		Progress: "",
 	}
+	// The script and the worker processes it starts can then be stopped together (see KillScript)
+	setProcessGroup(Scripts[id].Cmd)
 	stdout, err := Scripts[id].Cmd.StdoutPipe()
 	Mu.Unlock()
 	if err != nil {
@@ -191,10 +195,26 @@ func StartPythonScripts(jsonParam string, filename string, id string) (string, e
 	outputDone.Add(2)
 	go func() { defer outputDone.Done(); copyOutput(stdout, &response) }()
 	go func() { defer outputDone.Done(); copyOutput(stderr, &response) }()
-	err = Scripts[id].Cmd.Wait()
+	Mu.Lock()
+	cmd := Scripts[id].Cmd
+	Mu.Unlock()
+	err = cmd.Wait()
+	Mu.Lock()
+	cancelled := false
+	if script, ok := Scripts[id]; ok && script.Cmd == cmd {
+		script.Finished = true
+		cancelled = script.Cancelled
+		Scripts[id] = script
+	}
+	Mu.Unlock()
 	// Wait closes the pipes once the script exits: let the readers finish handling the last lines
 	// (including the response) before using the response
 	outputDone.Wait()
+	if cancelled {
+		// Stopped by the user: not an error, the client is told the run was cancelled
+		log.Println("Script " + filename + " with id: " + id + " was stopped by the user")
+		return "{\"cancelled\": true}", nil
+	}
 	if err != nil {
 		log.Println("Error waiting for command to finish")
 		if response != "" {
@@ -228,10 +248,10 @@ func copyOutput(r io.Reader, response *string) {
 			progress := strings.Split(lineText, "*_*")[2]
 			log.Println("Progress: " + progress)
 			Mu.Lock()
-			Scripts[id] = ScriptInfo{
-				Cmd:      Scripts[id].Cmd,
-				Progress: progress,
-			}
+			// Update the progress only, the other fields (e.g. Cancelled) are kept
+			script := Scripts[id]
+			script.Progress = progress
+			Scripts[id] = script
 			Mu.Unlock()
 		} else {
 			log.Println(lineText)
@@ -285,34 +305,29 @@ func WriteScriptId(data string, id string) error {
 	return nil
 }
 
-// KillScript kills the script with the id
+// KillScript stops the running script with the id, with all the processes it started (e.g. the
+// worker processes of PyCaret). It returns whether a running script was stopped.
 func KillScript(id string) bool {
 	Mu.Lock()
 	script, ok := Scripts[id]
-	if ok {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Println("Recovered in KillScript", r)
-				return
-			}
-		}()
-		if script.Cmd != nil { // Check if script.Cmd is not nil
-			if script.Cmd.ProcessState != nil && script.Cmd.ProcessState.Exited() {
-				log.Println("Script can be killed")
-				err := script.Cmd.Process.Kill()
-				if err != nil {
-					log.Print("Error killing process: ", err.Error())
-				}
-			} else {
-				log.Println("Script process not killable")
-			}
-		} else {
-			log.Println("script.Cmd is nil")
-		}
+	running := ok && script.Cmd != nil && script.Cmd.Process != nil && !script.Finished
+	if running {
+		// Marked before killing, so the pending request is answered as cancelled and not as an error
+		script.Cancelled = true
+		Scripts[id] = script
 	}
-	log.Println("Killed script: ", id)
 	Mu.Unlock()
-	return ok
+
+	if !running {
+		log.Println("No running script to stop with id: ", id)
+		return false
+	}
+	if err := killProcessTree(script.Cmd); err != nil {
+		log.Print("Error stopping script "+id+": ", err.Error())
+		return false
+	}
+	log.Println("Stopped script: ", id)
+	return true
 }
 
 // HandlePanic handles the panic
