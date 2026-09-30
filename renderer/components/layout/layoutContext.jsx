@@ -1,8 +1,10 @@
 import React, { createContext, useState } from "react"
 import { useEffect } from "react"
+import fs from "fs"
+import { confirmDialog } from "primereact/confirmdialog"
 import { toast } from "react-toastify"
 import { useMEDDataStore } from "../workspace/useMEDData"
-import { overwriteMEDDataObjectProperties, collectionExists } from "../mongoDB/mongoDBUtils"
+import { overwriteMEDDataObjectProperties, collectionExists, ensureContentCollection, isContentStale, reimportFileContent } from "../mongoDB/mongoDBUtils"
 
 /**
  * @typedef {React.Context} LayoutModelContext
@@ -373,24 +375,45 @@ function LayoutModelProvider({ children, layoutModel, setLayoutModel }) {
    */
   const openDataTableFromDB = async (action) => {
     let object = action.payload
+    const record = medDataStore.get(object.index)
 
     // Check if the path is null before proceeding. Useful for input tools generated files
-    if (!medDataStore.get(object.index)?.path) {
+    if (!record?.path) {
       openInTab(action, "dataTableFromDB")
       return
     }
-    const doesCollectionExists = await collectionExists(object.index)
+    const onDisk = fs.existsSync(record.path)
 
-    if (!doesCollectionExists) {
-      toast.error("The collection does not exist in the database. Try reloading the page.")
-      /* if (fileSize > maxBSONSize) {
-        // await ConvertBinaryToOriginalData(globalData, object)
-        // setTimeout(() => openInTab(action, "dataTableFromDB"), 1500)
-        toast.warn("The file is too large to be displayed in the data table.")
-      } */
-    } else {
-      openInTab(action, "dataTableFromDB")
+    try {
+      if (!(await collectionExists(object.index))) {
+        if (!onDisk) {
+          toast.error(`${record.name} is not in the database and was not found on disk.`)
+          return
+        }
+        // Files added to the workspace outside the app are synced as metadata only; their content
+        // is imported here, the first time they are opened.
+        toast.info(`Importing ${record.name}...`)
+        await ensureContentCollection(object.index, record.path, record.type)
+      } else if (onDisk && (await isContentStale(object.index, record.path))) {
+        const reload = await new Promise((resolve) =>
+          confirmDialog({
+            header: "File changed on disk",
+            message: `${record.name} changed on disk since it was loaded. Reload it? Unexported edits made in MEDiml will be lost.`,
+            icon: "pi pi-exclamation-triangle",
+            acceptLabel: "Reload",
+            rejectLabel: "Keep current copy",
+            accept: () => resolve(true),
+            reject: () => resolve(false)
+          })
+        )
+        if (reload) await reimportFileContent(object.index, record.path, record.type)
+      }
+    } catch (error) {
+      console.error(`Could not load ${record.name} into the database:`, error)
+      toast.error(`Could not load ${record.name}: ${error.message}`)
+      return
     }
+    openInTab(action, "dataTableFromDB")
   }
 
   /**
