@@ -465,8 +465,29 @@ input.node-editableLabel {
 }
 
 .options-overlayPanel {
-  min-width: 30ch;
-  max-width: 40ch;
+  /* Never wider than the window, so the settings stay reachable on small screens */
+  min-width: min(30ch, calc(100vw - 2rem));
+  max-width: min(40ch, calc(100vw - 2rem));
+}
+
+/* Node settings (nodeSpecific) scroll inside the panel instead of overflowing it */
+.options-overlayPanel .p-overlaypanel-content {
+  max-height: 80vh;
+  overflow: hidden auto;
+  overflow-wrap: anywhere;
+}
+
+/* Fixed widths set by the nodes (e.g. inline width: 300px) shrink to the panel's width:
+   a max-width always caps the width, and flex items may shrink below their content */
+.options-overlayPanel .p-overlaypanel-content * {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Bootstrap rows have negative side margins that push their content out of the panel */
+.options-overlayPanel .row {
+  margin-left: 0;
+  margin-right: 0;
 }
 
 .options-overlayPanel .header {
