@@ -41,23 +41,31 @@ class Pipeline:
         for index, node in enumerate(self.nodes):
             node.change_params(new_pipeline.nodes[index].params)
 
-    def run(self, set_progress, pipeline_number: int = 1) -> LearningContext:
-        context = LearningContext(
-            pipeline_index=pipeline_number, 
-            pipeline_name=self.pipeline_name, 
-            pipeline_description=self.pipeline_description
-        )
-        set_progress(now=0, label=f"Starting pipeline : {self.pipeline_name}")
-
+    def _partition_nodes(self) -> tuple[list[LearningNode], list[LearningNode]]:
+        """Splits the nodes into the initial ones (split/design, run once) and the downstream ones (run per split)."""
         initial_nodes = []
         downstream_nodes = []
-
         for node in self.nodes:
             lower_name = node.name.lower()
             if lower_name in {"split", "design"} and not downstream_nodes:
                 initial_nodes.append(node)
             else:
                 downstream_nodes.append(node)
+        return initial_nodes, downstream_nodes
+
+    def run(self, set_progress, pipeline_number: int = 1, used_learn_folders: set | None = None) -> LearningContext:
+        context = LearningContext(
+            pipeline_index=pipeline_number,
+            pipeline_name=self.pipeline_name,
+            pipeline_description=self.pipeline_description
+        )
+        # Experiment folders already used by the other pipelines of the run (see DesignNode)
+        if used_learn_folders is not None:
+            context.extras["used_learn_folders"] = used_learn_folders
+
+        set_progress(now=0, label=f"Starting pipeline : {self.pipeline_name}")
+
+        initial_nodes, downstream_nodes = self._partition_nodes()
 
         total_initial = max(len(initial_nodes), 1)
         for index, node in enumerate(initial_nodes, start=1):
@@ -84,12 +92,45 @@ class Pipeline:
         set_progress(now=100, label=f"Pipeline {pipeline_number} finished")
         return context
 
+    def finalize(self, set_progress, path_study: Path | str) -> LearningContext:
+        """Trains the final model of the pipeline on the whole learning set of an existing study.
+
+        The pipeline's nodes run once, with the learning set as training patients and the holdout set
+        as testing patients, so the data is processed exactly as in the splits. The splits are not re-run.
+        """
+        context = LearningContext(
+            pipeline_index=self.id,
+            pipeline_name=self.pipeline_name,
+            pipeline_description=self.pipeline_description,
+            path_study=Path(path_study),
+            finalize_model=True,
+        )
+        set_progress(now=0, label=f"Pipeline {self.id} | Finalizing model")
+
+        initial_nodes, downstream_nodes = self._partition_nodes()
+        for node in initial_nodes:
+            node.run(context)
+
+        context.current_split_index = 0
+        context.current_split_path = None
+        context.split_counter = 0
+        for node_index, node in enumerate(downstream_nodes, start=1):
+            progress = int(node_index / max(len(downstream_nodes), 1) * 99)
+            set_progress(now=progress, label=f"Pipeline {self.id} | Final model | Running node : {node.name.replace('_', ' ').title()}")
+            node.run(context)
+
+        set_progress(now=100, label=f"Pipeline {self.id} final model trained")
+        return context
+
     def _finalize_pipeline(self, context: LearningContext) -> None:
         if not context.extras.get("split_runs"):
             return
 
-        # Update results dict
-        final_results = MEDiml.utils.load_json(Path(context.path_study) / f'learn__{context.experiment_label}' / 'results_avg.json')
+        # Average the results of the splits of this run, as MEDiml's RadiomicsLearner does after the splits
+        # (the Analyze node is optional, and a results_avg.json file of a previous run would be outdated)
+        path_learn = Path(context.path_study) / f'learn__{context.experiment_label}'
+        MEDiml.learning.ml_utils.average_results(path_learn, save=True)
+        final_results = MEDiml.utils.load_json(path_learn / 'results_avg.json')
 
         for split in ("train", "test"):
             if final_results.get(split):
@@ -112,14 +153,7 @@ class Pipeline:
         file_obj.write(f"# Pipeline: {self._to_str()}\n")
 
         # Separate initial nodes (split/design) from downstream nodes as in run()
-        initial_nodes = []
-        downstream_nodes = []
-        for node in self.nodes:
-            lower_name = node.name.lower()
-            if lower_name in {"split", "design"} and not downstream_nodes:
-                initial_nodes.append(node)
-            else:
-                downstream_nodes.append(node)
+        initial_nodes, downstream_nodes = self._partition_nodes()
 
         # Emit initial nodes directly
         for node in initial_nodes:

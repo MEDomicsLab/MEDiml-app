@@ -349,15 +349,15 @@
           },
           "hasRun": false,
           "settings": {
-            "model": "XGBoost",
-            "XGBoost": {
-              "nFeaturesToSelect": 0.3,
-              "optimizeThreshold": true,
-              "finalizeModel": true,
-              "nameSave": "xgboost_5perc",
-              "optimizationMetric": "MCC",
-              "seed": 54288
-            }
+            "model": "xgboost",
+            "bestInclude": [],
+            "bestExclude": [],
+            "nFeaturesToSelect": 0.3,
+            "optimizeThreshold": true,
+            "useGPU": true,
+            "nameSave": "xgboost_5perc",
+            "optimizationMetric": "MCC",
+            "seed": 54288
           },
           "subflowId": "MAIN",
           "enableView": false
@@ -381,16 +381,15 @@
           "title": "Radiomics learner",
           "possibleSettings": {
             "defaultSettings": {
-              "model": "XGBoost",
-              "XGBoost": {
-                "nFeaturesToSelect": 0.3,
-                "optimizeThreshold": true,
-                "finalizeModel": true,
-                "nameSave": "xgboost_5perc",
-                "optimizationMetric": "MCC",
-                "method": "pycaret",
-                "seed": 54288
-              }
+              "model": "xgboost",
+              "bestInclude": [],
+              "bestExclude": [],
+              "nFeaturesToSelect": 0.3,
+              "optimizeThreshold": true,
+              "useGPU": true,
+              "nameSave": "xgboost_5perc",
+              "optimizationMetric": "MCC",
+              "seed": 54288
             }
           }
         },
