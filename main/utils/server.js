@@ -1,6 +1,8 @@
 import MEDconfig, { PORT_FINDING_METHOD } from "../../medomics.dev"
 import { getPythonEnvironment, getBundledPythonEnvironment } from "./pythonEnv"
-const { exec, execFile } = require("child_process")
+// The Go server is started with spawn, not execFile: execFile keeps all of its output in memory and
+// kills it once that output exceeds maxBuffer (1 MB), which long learning runs easily produce
+const { exec, spawn } = require("child_process")
 const os = require("os")
 var path = require("path")
 
@@ -145,7 +147,7 @@ export async function runServer(isProd, serverPort, serverProcess, serverState, 
       .then((port) => {
         serverPort = port
         serverState.serverIsRunning = true
-        serverProcess = execFile(`${process.platform == "win32" ? "main.exe" : "./main"}`, args, {
+        serverProcess = spawn(`${process.platform == "win32" ? "main.exe" : "./main"}`, args, {
           windowsHide: false,
           cwd: path.join(process.cwd(), "go_server"),
           env: env
@@ -188,18 +190,18 @@ export async function runServer(isProd, serverPort, serverProcess, serverState, 
         console.log("process.resourcesPath: ", process.resourcesPath)
 
         if (process.platform == "win32") {
-          serverProcess = execFile(path.join(process.resourcesPath, "go_executables\\server_go_win32.exe"), args, {
+          serverProcess = spawn(path.join(process.resourcesPath, "go_executables\\server_go_win32.exe"), args, {
             windowsHide: false,
             env: env
           })
           serverState.serverIsRunning = true
         } else if (process.platform == "linux") {
-          serverProcess = execFile(path.join(process.resourcesPath, "go_executables/server_go_linux"), args, {
+          serverProcess = spawn(path.join(process.resourcesPath, "go_executables/server_go_linux"), args, {
             windowsHide: false
           })
           serverState.serverIsRunning = true
         } else if (process.platform == "darwin") {
-          serverProcess = execFile(path.join(process.resourcesPath, "go_executables/server_go_mac"), args, {
+          serverProcess = spawn(path.join(process.resourcesPath, "go_executables/server_go_mac"), args, {
             windowsHide: false
           })
           serverState.serverIsRunning = true
