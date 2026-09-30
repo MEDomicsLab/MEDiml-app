@@ -187,11 +187,22 @@ func StartPythonScripts(jsonParam string, filename string, id string) (string, e
 		return "", err
 	}
 	response := ""
-	go copyOutput(stdout, &response)
-	go copyOutput(stderr, &response)
+	var outputDone sync.WaitGroup
+	outputDone.Add(2)
+	go func() { defer outputDone.Done(); copyOutput(stdout, &response) }()
+	go func() { defer outputDone.Done(); copyOutput(stderr, &response) }()
 	err = Scripts[id].Cmd.Wait()
+	// Wait closes the pipes once the script exits: let the readers finish handling the last lines
+	// (including the response) before using the response
+	outputDone.Wait()
 	if err != nil {
 		log.Println("Error waiting for command to finish")
+		if response != "" {
+			// The script crashed while exiting (e.g. exit status 0xc0000409 raised by a native library
+			// during Python's shutdown), after sending its complete response: the response is valid
+			log.Println("Script " + filename + " exited with an error after sending its response, the response is kept: " + err.Error())
+			return response, nil
+		}
 		return "", err
 	}
 	log.Println("Finished running script: " + filename + " with id: " + id)
