@@ -5,6 +5,8 @@ import {useState} from 'react';
 import { Dropdown } from 'primereact/dropdown';
 import { InputNumber } from 'primereact/inputnumber';
 import { updateHasWarning } from "../../flow/node";
+import Caption from '../../primitives/Caption'
+import { sectionCardClass } from '../../primitives/SectionCard'
 
 
 /**
@@ -37,11 +39,11 @@ const Cleaning = ({ id, data, type }) => {
         setupParam={data.setupParam}
         nodeSpecific={
           <>
-            <Row className="form-group-box" style={{ textAlign: "center", alignItems: "center", justifyContent: "center" }}>
+            <Row className={sectionCardClass} style={{ alignItems: "center", justifyContent: "center" }}>
               {/* missingCutoffps */}
               <Form.Group controlId="missingCutoffps" style={sectionStyle}>
               <Form.Label className="missingCutoffps">Missing Cut Off/Sample</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Maximum percentage of missing features allowed per sample.</p>
+              <Caption>Maximum percentage of missing features allowed per sample.</Caption>
                 <InputNumber
                     style={{width: "300px"}}
                     buttonLayout="horizontal"
@@ -65,7 +67,7 @@ const Cleaning = ({ id, data, type }) => {
               {/* missingCutoffpf */}
               <Form.Group controlId="missingCutoffpf" style={sectionStyle}>
               <Form.Label className="missingCutoffpf">Missing Patients Cut Off/Feature</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Maximum percentage of missing samples allowed per feature.</p>
+              <Caption>Maximum percentage of missing samples allowed per feature.</Caption>
                 <InputNumber
                     style={{width: "300px"}}
                     buttonLayout="horizontal"
@@ -89,9 +91,9 @@ const Cleaning = ({ id, data, type }) => {
               {/* covCutoff */}
               <Form.Group controlId="covCutoff" style={sectionStyle}>
                 <Form.Label className="covCutoff">Minimum Variation Percentage</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
+                <Caption>
                   Minimum coefficient of variation threshold to retain features.
-                </p>
+                </Caption>
                 <InputNumber
                     style={{width: "300px"}}
                     buttonLayout="horizontal"
@@ -115,7 +117,7 @@ const Cleaning = ({ id, data, type }) => {
               {/* imputation */}
               <Form.Group controlId="imputation" style={lastSectionStyle}>
               <Form.Label className="imputation">Imputation Method</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Strategy for filling missing values in features.</p>
+              <Caption>Strategy for filling missing values in features.</Caption>
                 <Dropdown 
                     style={{width: "300px"}}
                     value={data.setupParam.possibleSettings.defaultSettings.default.feature.continuous.imputation}

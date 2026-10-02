@@ -18,7 +18,8 @@ class AnalyzeNode(LearningNode):
         context.analyze_settings = dict(self.params)
         context.analysis_dict = {}
 
-        if context.current_result is None \
+        if context.finalize_model \
+            or context.current_result is None \
             or context.path_study is None \
             or context.experiment_label is None\
             or len(context.paths_splits) != context.current_split_index + 1:

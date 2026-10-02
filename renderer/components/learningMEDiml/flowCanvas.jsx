@@ -5,10 +5,9 @@ import { toast } from "react-toastify"
 import uuid from "react-native-uuid"
 import { loadJsonSync, processBatchSettings } from "../../utilities/fileManagementUtils.js"
 import { requestBackend } from "../../utilities/requests.js"
-import { getCollectionData } from "../dbComponents/utils.js"
 import { updateHasWarning } from "../flow/node.jsx"
 import ProgressBarRequests from "../generalPurpose/progressBarRequests.jsx"
-import { overwriteMEDDataObjectContent } from "../mongoDB/mongoDBUtils.js"
+import { getCollectionData, overwriteMEDDataObjectContent } from "../mongoDB/mongoDBUtils.js"
 
 
 // Workflow imports
@@ -20,7 +19,7 @@ import WorkflowBase from "../flow/workflowBase.jsx"
 import { ErrorRequestContext } from "../generalPurpose/errorRequestContext.jsx"
 import { PageInfosContext } from "../mainPages/moduleBasics/pageInfosContext.jsx"
 import { MEDDataObject } from "../workspace/NewMedDataObject.js"
-import { DataContext } from "../workspace/dataContext.jsx"
+import { useMEDDataStore } from "../workspace/useMEDData.js"
 import { WorkspaceContext } from "../workspace/workspaceContext.jsx"
 
 // Import node types
@@ -64,6 +63,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
   const { setViewport } = useReactFlow() // setViewport is used to update the viewport of the workflow
   const [treeData, setTreeData] = useState({}) // treeData is used to set the data of the tree menu
   const [isProgressUpdating, setIsProgressUpdating] = useState(false) // progress is used to store the progress of the workflow execution
+  const [isRunning, setIsRunning] = useState(false) // true while the experiment's process runs, the run button is then replaced by the stop button
   const [progress, setProgress] = useState({
     now: 0,
     currentLabel: ""
@@ -75,7 +75,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
   const { setIsResults, isResults, setShowResultsPane, updateFlowResults } = useContext(FlowResultsContext)
   const { canRun, setSceneName } = useContext(FlowInfosContext) // used to get the flow infos
   const { groupNodeId, changeSubFlow, updateNode } = useContext(FlowFunctionsContext)
-  const { globalData } = useContext(DataContext)
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
   const { port } = useContext(WorkspaceContext)
   const { setError, setShowError } = useContext(ErrorRequestContext) // used to get the flow infos
   const op = useRef(null);
@@ -144,6 +144,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
   useEffect(() => {
     async function getConfig() {
       // Get Config file
+      const globalData = medDataStore.snapshot()
       if (globalData[pageId]?.childrenIDs) {
         let configToLoad = MEDDataObject.getChildIDWithName(globalData, pageId, "metadata.json")
         setMetadataFileID(configToLoad)
@@ -731,6 +732,36 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
   }, [isProgressUpdating]); // The empty dependency array ensures this effect runs only once when the component mounts*/
 
   /**
+   * @param {Object} finalProgress progress displayed once the run is over
+   *
+   * @description
+   * Returns the scene to its normal state once a run is over (finished, failed or stopped):
+   * stops the progress bar, makes the edges dull and unfreezes the nodes
+   */
+  const resetRunState = (finalProgress) => {
+    setIsRunning(false)
+    setIsProgressUpdating(false)
+    setProgress(finalProgress)
+    // Make all edges dull
+    setEdges((prevEdges) =>
+      prevEdges.map((edge) => ({
+        ...edge,
+        animated: false,
+        selectable: true
+      }))
+    )
+    // Unfreeze all nodes
+    setNodes((prevNodes) =>
+      prevNodes.map((node) => ({
+        ...node,
+        draggable: true,
+        selectable: true,
+        connectable: true
+      }))
+    )
+  }
+
+  /**
    * @description
    * Runs all the pipelines in the workflow
    */
@@ -830,13 +861,20 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
         connectable: false
       }))
     )
-    
+
+    setIsRunning(true)
     requestBackend(
       port,
       "/learning_MEDiml/run_all/" + pageId,
       newFlow,
       (response) => {
         console.log("received results:", response)
+        // The experiment was stopped by the user (see onStop): the previous results are kept
+        if (response.cancelled) {
+          resetRunState({ now: 0, currentLabel: "" })
+          toast.info("Experiment stopped")
+          return
+        }
         if (response.warning){
           toast.warn(response.warning)
         }
@@ -845,28 +883,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
           toast.success("Experiment executed successfully")
           setShowError(false)
           //updateFlowResults(response)
-          setIsProgressUpdating(false)
-          setProgress({
-            now: 100,
-            currentLabel: "Done!"
-          })
-          // Make all edges dull
-          setEdges((prevEdges) =>
-            prevEdges.map((edge) => ({
-              ...edge,
-              animated: false,
-              selectable: true
-            }))
-          )
-          // Unfreeze all nodes
-          setNodes((prevNodes) =>
-            prevNodes.map((node) => ({
-              ...node,
-              draggable: true,
-              selectable: true,
-              connectable: true
-            }))
-          )
+          resetRunState({ now: 100, currentLabel: "Done!" })
           setIsResults(true)
           setNodes((prevNodes) =>
             prevNodes.map((node) => {
@@ -900,28 +917,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
             })
           )
         } else {
-          setIsProgressUpdating(false)
-          setProgress({
-            now: 0,
-            currentLabel: ""
-          })
-          // Make all edges dull
-          setEdges((prevEdges) =>
-            prevEdges.map((edge) => ({
-              ...edge,
-              animated: false,
-              selectable: true
-            }))
-          )
-          // Unfreeze all nodes
-          setNodes((prevNodes) =>
-            prevNodes.map((node) => ({
-              ...node,
-              draggable: true,
-              selectable: true,
-              connectable: true
-            }))
-          )
+          resetRunState({ now: 0, currentLabel: "" })
           if (typeof response.error === "string") {
             toast.error(response.error)
             console.log("error", response.error)
@@ -943,34 +939,36 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
         }
       },
       (error) => {
-        setIsProgressUpdating(false)
-        setProgress({
-          now: 0,
-          currentLabel: ""
-        })
-        // Make all edges dull
-        setEdges((prevEdges) =>
-          prevEdges.map((edge) => ({
-            ...edge,
-            animated: false,
-            selectable: true
-          }))
-        )
-        // Unfreeze all nodes
-        setNodes((prevNodes) =>
-          prevNodes.map((node) => ({
-            ...node,
-            draggable: true,
-            selectable: true,
-            connectable: true
-          }))
-        )
+        resetRunState({ now: 0, currentLabel: "" })
         toast.error("Error detected while running the experiment", error)
         console.log("error detected", error)
         setError(error)
       }
     )
   }, [nodes, edges, reactFlowInstance])
+
+  /**
+   * @description
+   * Stops the running experiment (its Python process and the processes it started). The run request
+   * is then answered as cancelled, which returns the scene to its normal state (see onRun)
+   */
+  const onStop = () => {
+    if (!confirm("Stop the experiment?\nThe results of the unfinished splits will be lost.")) return
+    requestBackend(
+      port,
+      "/stop/" + pageId,
+      {},
+      (response) => {
+        if (!response.stopped) {
+          toast.info("The experiment is not running anymore")
+        }
+      },
+      (error) => {
+        toast.error("Error detected while stopping the experiment", error)
+        console.error("Error detected while stopping the experiment", error)
+      }
+    )
+  }
 
   /**
    * @description
@@ -1244,7 +1242,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
               <>
                 <BtnDiv
                   buttonsList={[
-                    { type: "run", onClick: onRun, disabled: !canRun },
+                    isRunning ? { type: "stop", onClick: onStop } : { type: "run", onClick: onRun, disabled: !canRun },
                     { type: "clear", onClick: onClear },
                     { type: "save", onClick: onSave },
                   ]}

@@ -4,6 +4,8 @@ import { Form, Row, Col } from "react-bootstrap"
 import { InputText } from 'primereact/inputtext';
 import {useState} from 'react';
 import { Dropdown } from 'primereact/dropdown';
+import Caption from '../../primitives/Caption'
+import { sectionCardClass } from '../../primitives/SectionCard'
 
 
 /**
@@ -29,13 +31,13 @@ const Normalization = ({ id, data, type }) => {
         setupParam={data.setupParam}
         nodeSpecific={
           <>
-            <Row className="form-group-box" style={{ textAlign: "center", alignItems: "center", justifyContent: "center" }}>
+            <Row className={sectionCardClass} style={{ alignItems: "center", justifyContent: "center" }}>
               {/* Method */}
               <Form.Group controlId="normMethod">
                 <Form.Label className="normMethod">Normalization Method</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
+                <Caption>
                   Method used to harmonize feature distributions across datasets.
-                </p>
+                </Caption>
                 <Dropdown 
                   style={{width: "300px"}}
                   value={data.setupParam.possibleSettings.defaultSettings.method}

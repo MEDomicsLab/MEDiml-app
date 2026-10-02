@@ -2,10 +2,12 @@ import { Dropdown } from 'primereact/dropdown';
 import { InputNumber } from 'primereact/inputnumber';
 import { InputSwitch } from 'primereact/inputswitch';
 import { InputText } from 'primereact/inputtext';
-import { useContext, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Col, Form, Row } from "react-bootstrap";
 import Node, { updateHasWarning } from "../../flow/node";
-import { DataContext } from "../../workspace/dataContext";
+import Caption from '../../primitives/Caption';
+import { sectionCardClass } from '../../primitives/SectionCard';
+import { useMEDDataObjectsByType, useMEDDataStore } from "../../workspace/useMEDData";
 
 
 /**
@@ -25,7 +27,10 @@ const Split = ({ id, data, type }) => {
   const [listCSVFiles, setListCSVFiles] = useState([]) // List of csv files in the workspace
   const [listWSFolders, setListWSFolders] = useState([]) // List of folders in the workspace
   const [reload, setReload] = useState(false)
-  const { globalData } = useContext(DataContext) // We get the global data from the context
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
+  // Re-run the folder/csv list updates only when the set of directories/csv files actually
+  // changes, instead of on every unrelated workspace change.
+  const relevantIds = useMEDDataObjectsByType(["directory", "csv"])
   const sectionStyle = {
     marginBottom: "16px",
     paddingBottom: "12px",
@@ -48,6 +53,23 @@ const Split = ({ id, data, type }) => {
       data.setupParam.possibleSettings.defaultSettings.path_save_experiments = data.internal.settings.path_save_experiments
       setSelectedSaveFolder(data.internal.settings.path_save_experiments)
     }
+    if (data.internal.settings.active_method?.[0]?.toLowerCase() !== "cv"){
+      console.log("debug 0")
+      data.setupParam.possibleSettings.defaultSettings.active_method = data.internal.settings.active_method
+    }
+    if (data.setupParam.possibleSettings.defaultSettings.active_method?.[0]?.toLowerCase() === "cv" &&
+      data.setupParam.possibleSettings.defaultSettings.cv.nFolds &&
+      data.setupParam.possibleSettings.defaultSettings.cv.nFolds !== data.internal.settings.cv.nFolds
+    ){
+      console.log("debug 1")
+      data.setupParam.possibleSettings.defaultSettings.cv.nFolds = data.internal.settings.cv.nFolds
+    } else if (data.setupParam.possibleSettings.defaultSettings.active_method?.[0]?.toLowerCase() === "random" &&
+      data.setupParam.possibleSettings.defaultSettings.Random.nSplits &&
+      data.setupParam.possibleSettings.defaultSettings.Random.nSplits !== data.internal.settings.Random.nSplits
+    ){
+      console.log("debug 2")
+      data.setupParam.possibleSettings.defaultSettings.Random.nSplits = data.internal.settings.Random.nSplits
+    }
     updateWSfolder()
     updateCSVFilesList()
     setReload(!reload)
@@ -56,9 +78,10 @@ const Split = ({ id, data, type }) => {
   useEffect(() => {
     updateWSfolder()
     updateCSVFilesList()
-  }, [globalData])
+  }, [relevantIds])
 
   const updateWSfolder = () => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let wsFolders = []
@@ -72,6 +95,7 @@ const Split = ({ id, data, type }) => {
   }
 
   const updateCSVFilesList = () => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let csvFiles = []
@@ -82,46 +106,6 @@ const Split = ({ id, data, type }) => {
       })
       setListCSVFiles(csvFiles)
     }
-  }
-
-  const handleCSVFileChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-      data.setupParam.possibleSettings.defaultSettings.path_outcome_file = fileList
-    }
-    else {
-      data.setupParam.possibleSettings.defaultSettings.path_outcome_file = event.target.files.path
-    }
-    // Update node warnings
-    updateHasWarning(data)
-    setReload(!reload)
-  }
-
-  const handleSaveFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      }
-      data.setupParam.possibleSettings.defaultSettings.path_save_experiments = fileList
-      data.internal.settings.path_save_experiments = fileList
-    }
-    else {
-      data.setupParam.possibleSettings.defaultSettings.path_save_experiments = event.target.files.path
-      data.internal.settings.path_save_experiments = event.target.files.path
-    }
-    // Update node warnings
-    updateHasWarning(data)
-    setReload(!reload)
   }
 
   return (
@@ -136,13 +120,13 @@ const Split = ({ id, data, type }) => {
         nodeSpecific={
           <>
             <Row 
-              className="form-group-box" 
+              className={sectionCardClass} 
               style={{ maxHeight: "400px", textAlign: "center", alignItems: "center", justifyContent: "center", overflowY: "auto", overflowX: "hidden" }}
             >
               {/* Outcome Name */}
               <Form.Group controlId="outcomeName" style={sectionStyle}>
                 <Form.Label className="outcomeName">Outcome Name</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>A reference name to describe the problem studied.</p>
+                <Caption>A reference name to describe the problem studied.</Caption>
                 <InputText
                   style={{ maxWidth: "100%", height: "auto", width: "auto", display: "block", margin: "0 auto" }}
                   value={data.setupParam.possibleSettings.defaultSettings.outcome_name}
@@ -160,7 +144,7 @@ const Split = ({ id, data, type }) => {
               {/* Split Method */}
               <Form.Group controlId="splitMethod" style={sectionStyle}>
               <Form.Label className="splitMethod">Create Holdout Set</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>If activated a holdout set will be created. If not, all the data will be used for learning.</p>
+              <Caption>If activated a holdout set will be created. If not, all the data will be used for learning.</Caption>
                 <InputSwitch 
                     checked={data.setupParam.possibleSettings.defaultSettings.method == 'random' ? true : false} 
                     onChange={(event) => {
@@ -173,12 +157,58 @@ const Split = ({ id, data, type }) => {
                 />
               </Form.Group>
 
+              {/* Holdout set parameters (defaults of MEDiml's create_holdout_set) */}
+              {data.internal.settings.method == 'random' && (
+                <>
+                  <Form.Group controlId="holdoutPercentage" style={sectionStyle}>
+                    <Form.Label className="holdoutPercentage">Holdout Proportion</Form.Label>
+                    <Caption>Proportion of the patients kept aside in the holdout set.</Caption>
+                    <InputNumber
+                        style={{width: "300px"}}
+                        buttonLayout="horizontal"
+                        value={data.internal.settings.holdoutPercentage ?? 0.2}
+                        onValueChange={(event) => {
+                          data.setupParam.possibleSettings.defaultSettings.holdoutPercentage = event.target.value
+                          data.internal.settings.holdoutPercentage = event.target.value
+                          updateHasWarning(data)
+                          setReload(!reload)
+                        }}
+                        mode="decimal"
+                        showButtons
+                        min={0.01}
+                        max={0.99}
+                        step={0.01}
+                        incrementButtonClassName="p-button-info"
+                        decrementButtonClassName='p-button-info'
+                    />
+                  </Form.Group>
+
+                  <Form.Group controlId="holdoutSeed" style={sectionStyle}>
+                    <Form.Label className="holdoutSeed">Holdout Random Seed</Form.Label>
+                    <Caption>Ensures a reproducible holdout set.</Caption>
+                    <InputNumber
+                        style={{width: "300px", display: "block", margin: "0 auto"}}
+                        buttonLayout="horizontal"
+                        value={data.internal.settings.holdoutSeed ?? 1}
+                        onValueChange={(event) => {
+                          data.setupParam.possibleSettings.defaultSettings.holdoutSeed = event.target.value
+                          data.internal.settings.holdoutSeed = event.target.value
+                          updateHasWarning(data)
+                          setReload(!reload)
+                        }}
+                        mode="decimal"
+                        min={0}
+                    />
+                  </Form.Group>
+                </>
+              )}
+
               {/* Workspace Folder */}
               <Form.Group controlId="workspaceFolder" style={sectionStyle}>
                 <Form.Label className="workspaceFolder">Experiment's Workspace Folder</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
+                <Caption>
                   Folder containing the experiments' resources (features, outcome file, etc.).
-                </p>
+                </Caption>
                 <Col style={{ width: "300px", margin: "0 auto", display: "block", textAlign: "center" }}>
                   <Dropdown
                     style={{ maxWidth: "100%", height: "auto", width: "auto" }}
@@ -203,7 +233,7 @@ const Split = ({ id, data, type }) => {
               {/* Path Outcome */}
               <Form.Group controlId="outcomeFile" style={sectionStyle}>
               <Form.Label className="outcomeFile">Outcomes CSV</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>CSV file of the outcomes.</p>
+              <Caption>CSV file of the outcomes.</Caption>
               <Col style={{ width: "300px", margin: "0 auto", display: "block", textAlign: "center" }}>
                 <Dropdown
                   style={{ maxWidth: "100%", height: "auto", width: "auto" }}
@@ -228,9 +258,9 @@ const Split = ({ id, data, type }) => {
               {/* Save Folder */}
               <Form.Group controlId="experimentSaveFolder" style={lastSectionStyle}>
                 <Form.Label className="experimentSaveFolder">Save Folder</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
+                <Caption>
                   Folder where the results will be saved. The folder should not be empty.
-                </p>
+                </Caption>
                 <Col style={{ width: "300px", margin: "0 auto", display: "block", textAlign: "center" }}>
                   <Dropdown
                     style={{ maxWidth: "100%", height: "auto", width: "auto" }}
@@ -258,7 +288,7 @@ const Split = ({ id, data, type }) => {
                   className="splitType">
                       Split Type
               </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Choose method for splitting data into sets.</p>
+              <Caption>Choose method for splitting data into sets.</Caption>
               <Dropdown 
                   style={{width: "300px"}}
                   value={data.setupParam.possibleSettings.defaultSettings.active_method[0]}
@@ -288,9 +318,9 @@ const Split = ({ id, data, type }) => {
                   className="splitMethod">
                       Split Method
               </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Algorithm for distributing samples into train/test sets.</p>
+              <Caption>Algorithm for distributing samples into train/test sets.</Caption>
                 <Dropdown 
-                    style={{width: "300px", display: "block", margin: "0 auto"}}
+                    style={{width: "300px", margin: "0 auto"}}
                     value={data.setupParam.possibleSettings.defaultSettings.Random.method}
                     options={[{ name: 'SubSampling' }]}
                     optionLabel="name" 
@@ -310,9 +340,9 @@ const Split = ({ id, data, type }) => {
                   className="nSplits">
                       Splits Number
               </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Total number of data partitions to create.</p>
+              <Caption>Total number of data partitions to create.</Caption>
                 <InputNumber
-                    style={{width: "300px", display: "block", margin: "0 auto"}}
+                    style={{width: "300px", margin: "0 auto"}}
                     buttonLayout="horizontal"
                     value={data.setupParam.possibleSettings.defaultSettings.Random.nSplits}
                     onValueChange={(event) => {
@@ -336,7 +366,7 @@ const Split = ({ id, data, type }) => {
                   className="stratifyInstitutions">
                       Flag by Institution
               </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Maintain institution representation in train/test.</p>
+              <Caption>Maintain institution representation in train/test.</Caption>
               <br></br>
                 <InputSwitch 
                     checked={data.setupParam.possibleSettings.defaultSettings.Random.stratifyInstitutions} 
@@ -355,9 +385,9 @@ const Split = ({ id, data, type }) => {
                   className="testProportion">
                       Train/Test Proportion
               </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Percentage of data allocated for testing.</p>
+              <Caption>Percentage of data allocated for testing.</Caption>
                 <InputNumber
-                    style={{width: "300px", display: "block", margin: "0 auto"}}
+                    style={{width: "300px", margin: "0 auto"}}
                     buttonLayout="horizontal"
                     value={data.setupParam.possibleSettings.defaultSettings.Random.testProportion}
                     onValueChange={(event) => {
@@ -380,7 +410,7 @@ const Split = ({ id, data, type }) => {
               {/* Seed */}
               <Form.Group controlId="seed" style={lastSectionStyle}>
                 <Form.Label className="seed">Random Seed</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Ensures reproducible random data splitting.</p>
+                <Caption>Ensures reproducible random data splitting.</Caption>
                 <InputNumber
                     style={{width: "300px", display: "block", margin: "0 auto"}}
                     buttonLayout="horizontal"
@@ -405,7 +435,7 @@ const Split = ({ id, data, type }) => {
               {/* Number of splits */}
               <Form.Group controlId="nSplits" style={sectionStyle}>
                 <Form.Label className="nSplits">Number of folds</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>K value for cross-validation folds (K).</p>
+                <Caption>K value for cross-validation folds (K).</Caption>
                 <InputNumber
                     style={{width: "300px"}}
                     buttonLayout="horizontal"
@@ -428,7 +458,7 @@ const Split = ({ id, data, type }) => {
               <Form.Group controlId="seed" style={lastSectionStyle}>
                 <Form.Label className="seed">Random Seed
                 </Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Ensures reproducible random data splitting.</p>
+                <Caption>Ensures reproducible random data splitting.</Caption>
                 <InputNumber
                     style={{width: "300px", display: "block", margin: "0 auto"}}
                     buttonLayout="horizontal"

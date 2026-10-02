@@ -1,0 +1,13 @@
+{
+  "stylelintErrors": 0,
+  "stylelintWarnings": 569,
+  "inlineStyleProps": 295,
+  "captionPatternCopies": 0,
+  "unresponsiveCols": 126,
+  "uniqueHexColors": 120,
+  "distinctPxValues": 31,
+  "importantCount": 108,
+  "responsiveQueries": -3,
+  "crossFileDuplicateSelectors": 4,
+  "deadStylesheets": 0
+}

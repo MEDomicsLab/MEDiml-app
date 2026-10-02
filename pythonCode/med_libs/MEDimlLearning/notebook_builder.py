@@ -42,12 +42,14 @@ class NotebookBuilder:
 
         for index, pipeline in enumerate(pipelines, start=1):
             for node in pipeline.nodes:
-                if node.name.lower() == "design":
+                # The experiment paths are set in the split node (in the design node in older scenes)
+                if node.name.lower() in {"split", "design"} and "path_save_experiments" in node.params:
                     path_save_experiments = Path(node.params["path_save_experiments"])
                     outcome_name = node.params["outcome_name"]
                     break
 
-            pipeline_names.append(f"{outcome_name}_{'pipeline' + str(index)}")
+            # Named after the pipeline's number in the scene, so notebooks of different pipelines don't overwrite each other
+            pipeline_names.append(f"{outcome_name}_{pipeline.pipeline_description}")
 
         if path_save_experiments is None or outcome_name is None:
             raise ValueError("No design node found in the pipelines.")
@@ -64,9 +66,9 @@ class NotebookBuilder:
         if not pipelines_to_generate:
             return {"error": "No pipeline to generate!"}
 
-        for i, pipeline in enumerate(pipelines):
-            if pipeline.pipeline_name not in  pipelines_to_generate:
-                del pipelines[i]
+        pipelines = [pipeline for pipeline in pipelines if pipeline.pipeline_name in pipelines_to_generate]
+        if not pipelines:
+            return {"error": "The selected pipeline no longer exists in the scene!"}
 
         _, outcome_name, pipeline_names = self._get_pipeline_metadata(pipelines)
 

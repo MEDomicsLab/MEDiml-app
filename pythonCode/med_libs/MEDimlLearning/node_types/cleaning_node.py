@@ -26,7 +26,8 @@ class CleaningNode(LearningNode):
 
         data_cln_method = next(iter(context.cleaning_settings.keys()))
         cleaning_dict = context.cleaning_settings[data_cln_method]["feature"]["continuous"]
-        data_cleaner = MEDiml.learning.DataCleaner(cleaning_dict)
+        # The settings are keyword arguments of the cleaner (cutoffs, imputation), as in MEDiml's RadiomicsLearner
+        data_cleaner = MEDiml.learning.DataCleaner(**cleaning_dict)
 
         for item in context.rad_var_struct["path"].values():
             path_radiomics_csv = item["csv"]
@@ -69,7 +70,7 @@ class CleaningNode(LearningNode):
                 "rad_tables_final = []",
                 "data_cln_method = list(cleaning_settings.keys())[0]",
                 "cleaning_dict = cleaning_settings[data_cln_method]['feature']['continuous']",
-                "data_cleaner = MEDiml.learning.DataCleaner(cleaning_dict)",
+                "data_cleaner = MEDiml.learning.DataCleaner(**cleaning_dict)",
                 "for item in rad_var_struct['path'].values():",
                 "    path_radiomics_csv = item['csv']",
                 "    path_radiomics_txt = item['txt']",

@@ -444,7 +444,7 @@ const SidebarDirectoryTreeControlled = ({ setExternalSelectedItems, setExternalD
                       onClick={(e) => {
                         e.preventDefault()
                         e.stopPropagation()
-                        MEDDataObject.updateWorkspaceDataObject()
+                        require("electron").ipcRenderer.send("messageFromNext", "updateWorkingDirectory")
                         MEDDataObject.verifyLockedObjects(globalData)
                       }}
                     >

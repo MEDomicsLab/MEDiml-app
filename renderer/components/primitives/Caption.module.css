@@ -1,0 +1,35 @@
+/* Caption -- the one definition replacing 70 copy-pasted inline style objects.
+   See Caption.jsx for what changed and why. */
+
+.caption {
+  font-size: var(--med-text-sm);
+  line-height: var(--med-leading-body);
+  color: var(--med-text-secondary);
+  margin: 0 0 var(--med-caption-gap) 0;
+
+  /* Caps line length. Without it these paragraphs run past 200 characters per
+     line on a 4K display; readable measure is 45-75. */
+  max-width: var(--med-measure);
+
+  /* The three declarations below undo styling inherited from `.form-group-box`,
+     which sets `font-weight: bold` and `text-align: center` on the CONTAINER so
+     every descendant picks them up. That is why all 70 of the original inline
+     objects carried `fontWeight: "normal"`: each one was locally undoing a
+     container it did not control. Stating it once here is the whole point of
+     the component. They become redundant as pages move to <SectionCard>, but
+     must stay while any caller still sits inside a .form-group-box. */
+  font-weight: 400;
+  font-style: normal;
+  text-align: start;
+}
+
+/* Sits directly under its control rather than above it. */
+.below {
+  margin: var(--med-space-1) 0 0 0;
+}
+
+/* For a caption carrying a warning rather than an explanation. Paired with an
+   icon by the caller -- colour alone is never the only signal. */
+.warn {
+  color: var(--med-status-warn);
+}

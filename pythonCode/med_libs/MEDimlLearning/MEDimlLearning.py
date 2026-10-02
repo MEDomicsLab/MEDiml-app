@@ -30,6 +30,13 @@ class MEDimlLearning:
     def run_all(self) -> dict[str, Any]:
         return self.workflow.run_all()
 
+    def finalize_model(self) -> dict[str, Any]:
+        return self.workflow.finalize(
+            pipeline_name=self.json_config["pipeline"],
+            path_study=self.json_config["path_study"],
+            models_path=self.json_config.get("models_path"),
+        )
+
     def generate_notebooks(self) -> dict[str, Any]:
         return NotebookBuilder(self.json_config).generate()
 

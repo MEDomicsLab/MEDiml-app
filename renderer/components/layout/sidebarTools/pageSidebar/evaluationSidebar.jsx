@@ -1,9 +1,8 @@
-import React, { useContext, useEffect, useState } from "react"
+import React from "react"
 import { Stack } from "react-bootstrap"
-import { WorkspaceContext } from "../../../workspace/workspaceContext"
 import SidebarDirectoryTreeControlled from "../directoryTree/sidebarDirectoryTreeControlled"
 import { Accordion } from "react-bootstrap"
-import { DataContext } from "../../../workspace/dataContext"
+import { useMEDDataStore } from "../../../workspace/useMEDData"
 import FileCreationBtn from "../fileCreationBtn"
 import { insertMEDDataObjectIfNotExists } from "../../../mongoDB/mongoDBUtils"
 import { MEDDataObject } from "../../../workspace/NewMedDataObject"
@@ -22,20 +21,18 @@ const typeInfo = {
  * @returns {JSX.Element} - This component is the sidebar tools component that will be used in the sidebar component as the learning page
  */
 const EvaluationSidebar = () => {
-  const { workspace } = useContext(WorkspaceContext) // We get the workspace from the context to retrieve the directory tree of the workspace, thus retrieving the data files
-  const [experimentList, setExperimentList] = useState([]) // We initialize the experiment list state to an empty array
-  const { globalData } = useContext(DataContext)
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
 
-  // We use the useEffect hook to update the experiment list state when the workspace changes
-  useEffect(() => {
-    let localExperimentList = []
-    for (const experimentId of globalData["EXPERIMENTS"].childrenIDs) {
-      localExperimentList.push(globalData[experimentId].name)
-    }
-    setExperimentList(localExperimentList)
-  }, [workspace, globalData]) // We log the workspace when it changes
+  // Computed fresh from the store on every call (instead of a useEffect-derived, potentially
+  // stale state), since this is only ever needed synchronously inside checkIsNameValid below.
+  const getExperimentList = () => {
+    const experimentsNode = medDataStore.get("EXPERIMENTS")
+    if (!experimentsNode) return []
+    return experimentsNode.childrenIDs.map((experimentId) => medDataStore.get(experimentId)?.name)
+  }
 
   const checkIsNameValid = (name) => {
+    const experimentList = getExperimentList()
     return name != "" && !experimentList.includes(name + "." + typeInfo.extension) && !name.includes(" ")
   }
 

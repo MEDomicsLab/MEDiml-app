@@ -400,19 +400,26 @@ export const updateHasWarning = (data) => {
   }
   // Radiomics Learner node check if all the mandatory fields are filled
   if (data && data.setupParam && data.setupParam.type === "RadiomicsLearner") {
-    if (data.internal.settings.XGBoost.nameSave === null || data.internal.settings.XGBoost.nameSave === "") {
+    // Older workflows nest the learner parameters under the model name (e.g. settings.XGBoost)
+    const learnerSettings = data.internal.settings
+    const nestedParams = learnerSettings[learnerSettings.model]
+    const learnerParams = nestedParams && typeof nestedParams === "object" && !Array.isArray(nestedParams) ? nestedParams : learnerSettings
+    if (!learnerSettings.model) {
+      data.internal.hasWarning = { state: true, tooltip: <p>No learning algorithm is selected!</p> }
+      return
+    } else if (learnerParams.nameSave === null || learnerParams.nameSave === "") {
       data.internal.hasWarning = { state: true, tooltip: <p>Save name for the model is not given!</p> }
       return
-    } else if (data.internal.settings.XGBoost.varImportanceThreshold === null || data.internal.settings.XGBoost.varImportanceThreshold === ""){
+    } else if (learnerParams.nFeaturesToSelect === null || learnerParams.nFeaturesToSelect === ""){
       data.internal.hasWarning = { state: true, tooltip: <p>Varialble importance cut-off threshold is not given!</p> }
       return
-    } else if (data.internal.settings.XGBoost.varImportanceThreshold < 0 || data.internal.settings.XGBoost.varImportanceThreshold > 1){
+    } else if (learnerParams.nFeaturesToSelect < 0 || learnerParams.nFeaturesToSelect > 1){
       data.internal.hasWarning = { state: true, tooltip: <p>Varialble importance cut-off threshold must be between 0 and 1!</p> }
       return
-    } else if (data.internal.settings.XGBoost.seed === null || data.internal.settings.XGBoost.seed === ""){
+    } else if (learnerParams.seed === null || learnerParams.seed === ""){
       data.internal.hasWarning = { state: true, tooltip: <p>Seed for the random generator is not given!</p> }
       return
-    } if (data.internal.settings.XGBoost.optimizationMetric === null || data.internal.settings.XGBoost.optimizationMetric === "" || data.internal.settings.XGBoost.optimizationMetric === undefined){
+    } if (learnerParams.optimizationMetric === null || learnerParams.optimizationMetric === "" || learnerParams.optimizationMetric === undefined){
       data.internal.hasWarning = { state: true, tooltip: <p>Optimization metric is not given!</p> }
       return
     } else {
