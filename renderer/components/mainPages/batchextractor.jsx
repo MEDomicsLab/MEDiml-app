@@ -57,12 +57,21 @@ const EXTRACT_DATASET = {
 
 const DEFAULT_N_CORES = 12
 
+/** Feature categories in the order they are reported, with the prefixes recognizing them (mirrors
+ *  FEATURE_CATEGORIES in MEDimlExtraction.py, which does the actual categorization). */
+const FEATURE_CATEGORIES = [
+  { key: "morph", label: "Morphological", prefixes: "morph_" },
+  { key: "intensity", label: "Intensity", prefixes: "locInt_, stats_, intHist_, intVolHist_" },
+  { key: "texture", label: "Texture", prefixes: "glcm_, glrlm_, glszm_, ngldm_, gldzm_, ngtdm_" },
+  { key: "unknown", label: "Unknown", prefixes: "any other prefix" }
+]
+
 const BatchExtractor = ({ pageId, configPath = "" }) => {
   const { port } = useContext(WorkspaceContext) // Get the port of the backend
   const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
   // Re-run the folder/csv/settings list updates only when the set of relevant files actually
   // changes, instead of on every unrelated workspace change.
-  const relevantIds = useMEDDataObjectsByType(["directory", "csv", "json"])
+  const relevantIds = useMEDDataObjectsByType(["directory", "csv", "json", "txt"])
   const { setError } = useContext(ErrorRequestContext) // Get the function to set the error request
   const [progress, setProgress] = useState(0)
   const [loadingEdit, setLoadingEdit] = useState(false)
@@ -89,17 +98,24 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
   const [selectedPredDosesCSV, setSelectedPredDosesCSV] = useState('') // Path to CSV file containing prescribed doses per patient
   const [prescDoseColumn, setPrescDoseColumn] = useState('') // Column name for prescribed dose values in pred_doses_csv
   const csvFileInputRef = useRef(null) // Used to reset the local ROI CSV file input, since the file is optional
+  const [listTXTFiles, setListTXTFiles] = useState([]) // List of txt files in the workspace
+  const [categorizeCSVFile, setCategorizeCSVFile] = useState('') // Radiomics table to categorize
+  const [categorizeTXTFile, setCategorizeTXTFile] = useState('') // Definitions file of the radiomics table
+  const [categorizing, setCategorizing] = useState(false)
+  const [categorizeResults, setCategorizeResults] = useState(null) // Features count and saved files per category
 
   useEffect(() => {
     updateWSfolder()
     updateCSVFilesList()
     updateSettingsFilesList()
+    updateTXTFilesList()
   }, [])
-  
+
   useEffect(() => {
     updateWSfolder()
     updateCSVFilesList()
     updateSettingsFilesList()
+    updateTXTFilesList()
   }, [relevantIds])
 
   const updateWSfolder = () => {
@@ -141,6 +157,19 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
         }
       })
       setListSettingsFiles(settingsFiles)
+    }
+  }
+
+  const updateTXTFilesList = () => {
+    const globalData = medDataStore.snapshot()
+    if (globalData !== undefined) {
+      let txtFiles = []
+      Object.keys(globalData).forEach((key) => {
+        if (globalData[key].type === "txt") {
+          txtFiles.push({ name: globalData[key].name, value: globalData[key].path })
+        }
+      })
+      setListTXTFiles(txtFiles)
     }
   }
 
@@ -344,6 +373,66 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
   const handleOpenFolderClick = () => {
     const { shell } = require('electron');
     shell.openPath(saveFolder);
+  }
+
+  /**
+   * @description Selects the radiomics table to categorize, and its definitions file when MEDiml saved
+   * it next to the table under the same name, as it does by default.
+   * @param {string} csvPath - The path of the radiomics table
+   */
+  const selectCategorizeCSV = (csvPath) => {
+    setCategorizeCSVFile(csvPath)
+    setCategorizeResults(null)
+    const txtPath = csvPath ? csvPath.replace(/\.csv$/i, '.txt') : ''
+    if (txtPath && fs.existsSync(txtPath)) {
+      setCategorizeTXTFile(txtPath)
+    }
+  }
+
+  const handleCategorizeCSVChange = (event) => {
+    if (event.target.files.length > 0) {
+      selectCategorizeCSV(event.target.files[0].path)
+    }
+  }
+
+  const handleCategorizeTXTChange = (event) => {
+    if (event.target.files.length > 0) {
+      setCategorizeTXTFile(event.target.files[0].path)
+      setCategorizeResults(null)
+    }
+  }
+
+  const handleCategorizeClick = () => {
+    setCategorizing(true)
+    setCategorizeResults(null)
+    requestBackend(
+      port,
+      '/extraction_MEDiml/run_all/be_categorize',
+      { path_csv: categorizeCSVFile, path_txt: categorizeTXTFile },
+      (response) => {
+        setCategorizing(false)
+        MEDDataObject.updateWorkspaceDataObject()
+        if (response.error) {
+          console.error('Error:', response.error)
+          toast.error('Error: ' + response.error)
+          // eslint-disable-next-line no-prototype-builtins
+          if (!response.error.hasOwnProperty('message')) {
+            setError({"message": response.error})
+          } else {
+            setError(response.error)
+          }
+        } else {
+          setCategorizeResults(response)
+          const nCategories = Object.keys(response.categories).length
+          toast.success(`Features split into ${nCategories} categor${nCategories === 1 ? 'y' : 'ies'}!`)
+        }
+      },
+      (error) => {
+        setCategorizing(false)
+        console.error('Error:', error)
+        toast.error('Error: ' + error)
+      }
+    )
   }
 
   const handleRunClick = async () => {
@@ -845,6 +934,103 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
           rounded
         />
       </Toolbar>
+      </Card.Body>
+    </Card>
+
+    {/* RADIOMICS FEATURES CATEGORIZATION */}
+    <Card>
+      <Card.Body>
+        <Card.Header>
+          <h4>Batch Extractor - Radiomics Features Categorization</h4>
+          <span>
+            Splits an extracted radiomics table into one table per feature category: Morphological, Intensity and Texture.
+          </span>
+        </Card.Header>
+        <SectionCard
+          row
+          title="Radiomics table"
+          hint="CSV file of the extracted features (e.g. radiomics__PET(GTV)__image.csv), with the radVar1, radVar2, ... columns."
+        >
+          <SourcePicker
+            mode={useWorkspace ? "workspace" : "local"}
+            kind="file"
+            accept=".csv"
+            name="categorize_csv"
+            options={listCSVFiles}
+            value={categorizeCSVFile}
+            onWorkspaceChange={selectCategorizeCSV}
+            onLocalChange={handleCategorizeCSVChange}
+            placeholder="Select a file"
+          />
+        </SectionCard>
+
+        <SectionCard
+          row
+          title="Features definitions"
+          hint="TXT file linking the table columns to the features names (||radVar1:morph_3D__Fmorph_vol__scale2||...). Filled in automatically when it sits next to the table under the same name."
+        >
+          <SourcePicker
+            mode={useWorkspace ? "workspace" : "local"}
+            kind="file"
+            accept=".txt"
+            name="categorize_txt"
+            options={listTXTFiles}
+            value={categorizeTXTFile}
+            onWorkspaceChange={(path) => {
+              setCategorizeTXTFile(path)
+              setCategorizeResults(null)
+            }}
+            onLocalChange={handleCategorizeTXTChange}
+            placeholder="Select a file"
+            caption={
+              !useWorkspace && categorizeTXTFile ? <Caption>{categorizeTXTFile}</Caption> : null
+            }
+          />
+        </SectionCard>
+
+        {categorizeResults && (
+          <TreeTable
+            value={FEATURE_CATEGORIES.filter((c) => categorizeResults.categories[c.key]).map((c) => ({
+              key: c.key,
+              data: {
+                category: c.label,
+                features: categorizeResults.categories[c.key].n_features,
+                folder: categorizeResults.categories[c.key].folder
+              }
+            }))}
+            className="mt-4"
+            tableStyle={{ minWidth: '25rem' }}
+          >
+            <Column field="category" header="Category"></Column>
+            <Column field="features" header={`Features (${categorizeResults.n_patients} patients)`}></Column>
+            <Column field="folder" header="Saved in"></Column>
+          </TreeTable>
+        )}
+
+        <Toolbar>
+          <Button
+            severity="success"
+            label="CATEGORIZE"
+            name="CategorizeButton"
+            onClick={handleCategorizeClick}
+            disabled={!categorizeCSVFile || !categorizeTXTFile || categorizing}
+            loading={categorizing}
+            icon="pi pi-sitemap"
+            raised
+            rounded
+          />
+          {categorizeResults && (
+            <Button
+              severity="info"
+              label="Open folder"
+              name="OpenCategoriesFolderButton"
+              icon="pi pi-folder-open"
+              onClick={() => require('electron').shell.openPath(require('path').dirname(categorizeCSVFile))}
+              raised
+              rounded
+            />
+          )}
+        </Toolbar>
       </Card.Body>
     </Card>
   </div>

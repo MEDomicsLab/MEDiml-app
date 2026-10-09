@@ -23,6 +23,17 @@ UPLOAD_FOLDER = Path(os.path.dirname(os.path.abspath(__file__)))  / "tmp"
 # the saved features when none is defined in the extraction settings file.
 DEFAULT_ROI_TYPE = 'all'
 
+# Radiomics feature categories, recognized by the prefix of the full feature names of a radiomics
+# table definitions (.txt) file. Features matching none of them are placed in UNKNOWN_CATEGORY.
+FEATURE_CATEGORIES = {
+    'morph': ('morph_',),
+    'intensity': ('locInt_', 'stats_', 'intHist_', 'intVolHist_'),
+    'texture': ('glcm_', 'glrlm_', 'glszm_', 'ngldm_', 'gldzm_', 'ngtdm_'),
+}
+UNKNOWN_CATEGORY = 'unknown'
+# Replaces the image space in the name of a categorized table, e.g. radiomics__PET(GTV)__morph.csv
+CATEGORY_TABLE_TAGS = {'morph': 'morph', 'intensity': 'int', 'texture': 'text', UNKNOWN_CATEGORY: 'unknown'}
+
 class ExtractionWorkflow:
     """
     Class to represent the extraction workflow of the MEDiml application as a list of pipelines.
@@ -879,7 +890,87 @@ class MEDimlExtraction:
             return {"error": f"PROBLEM WITH BATCH EXTRACTION {str(e)}"}
         
         return {"success": "Radiomics features extracted successfully."}
-        
+
+    def run_be_categorize(self) -> dict:
+        """
+        Splits a radiomics table (.csv) into one table per feature category (morph, intensity, texture,
+        and unknown for the features matching no category), using its definitions (.txt) file.
+
+        Each category is saved in `<csv folder>/<category>/` as a `.csv` and `.txt` pair, with the `image`
+        space of the table name replaced by the category tag (e.g. radiomics__PET(GTV)__morph.csv), which keeps
+        the `radiomics__<scan>(<roi>)__<space>` naming the learning module relies on. Filtered spaces are kept
+        and tagged (e.g. __log_sigma1_morph) so the tables of different spaces do not overwrite each other.
+        The features are renumbered from radVar1 in each category, since MEDiml finds the full name of
+        `radVarN` at position N of the definitions.
+
+        Returns:
+            dict: The number of features and the saved files of each category found.
+        """
+        data = self.json_config
+        if not data.get("path_csv"):
+            return {"error": "No radiomics table (.csv) given!"}
+        if not data.get("path_txt"):
+            return {"error": "No radiomics definitions file (.txt) given!"}
+        path_csv = Path(data["path_csv"])
+        path_txt = Path(data["path_txt"])
+
+        try:
+            # Read as text so the values (e.g. MEDiml's 'NaN') are saved back exactly as they were
+            table = pd.read_csv(path_csv, index_col=0, dtype=str, keep_default_na=False)
+            with open(path_txt, 'r') as f:
+                definitions = dict(
+                    entry.split(':', 1) for entry in f.read().strip().split('||') if ':' in entry
+                )
+
+            missing = [var for var in table.columns if var not in definitions]
+            if missing:
+                raise ValueError(
+                    f"{len(missing)} column(s) of {path_csv.name} are not defined in {path_txt.name} "
+                    f"(e.g. {', '.join(missing[:3])}). Make sure both files come from the same extraction."
+                )
+
+            # Columns of each category, in their original order
+            columns = {category: [] for category in [*FEATURE_CATEGORIES, UNKNOWN_CATEGORY]}
+            for var in table.columns:
+                name = definitions[var]
+                category = next(
+                    (c for c, prefixes in FEATURE_CATEGORIES.items() if name.startswith(prefixes)),
+                    UNKNOWN_CATEGORY
+                )
+                columns[category].append(var)
+
+            categories = {}
+            for category, variables in columns.items():
+                if not variables:
+                    continue
+                new_names = [f'radVar{i + 1}' for i in range(len(variables))]
+                tag = CATEGORY_TABLE_TAGS[category]
+                head, sep, space = path_csv.stem.rpartition(')__')
+                if not sep:
+                    name = f'{path_csv.stem}__{tag}'
+                elif space == 'image':
+                    name = f'{head}{sep}{tag}'
+                else:
+                    name = f'{head}{sep}{space}_{tag}'
+                folder = path_csv.parent / category
+                folder.mkdir(exist_ok=True)
+                csv_save = folder / (name + '.csv')
+                txt_save = folder / (name + '.txt')
+                table[variables].set_axis(new_names, axis=1).to_csv(csv_save, encoding='utf-8')
+                with open(txt_save, 'w') as f:
+                    f.write('||' + ''.join(f'{new}:{definitions[old]}||' for new, old in zip(new_names, variables)))
+                categories[category] = {
+                    "n_features": len(variables),
+                    "folder": str(folder),
+                    "csv": str(csv_save),
+                    "txt": str(txt_save),
+                }
+
+        except Exception as e:
+            return {"error": f"PROBLEM WITH FEATURES CATEGORIZATION {str(e)}"}
+
+        return {"categories": categories, "n_patients": len(table.index)}
+
     def get_progress(self) -> dict:
         """
         Returns the progress of the pipeline execution.\n
