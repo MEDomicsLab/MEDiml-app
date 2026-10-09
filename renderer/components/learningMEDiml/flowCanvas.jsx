@@ -3,7 +3,7 @@ import { toast } from "react-toastify"
 
 // Import utilities
 import uuid from "react-native-uuid"
-import { loadJsonSync, processBatchSettings } from "../../utilities/fileManagementUtils.js"
+import { downloadFile, loadJsonSync, processBatchSettings } from "../../utilities/fileManagementUtils.js"
 import { requestBackend } from "../../utilities/requests.js"
 import { updateHasWarning } from "../flow/node.jsx"
 import ProgressBarRequests from "../generalPurpose/progressBarRequests.jsx"
@@ -45,6 +45,64 @@ import { deepCopy } from "../../utilities/staticFunctions.js"
 import { useRef } from "react"
 
 const staticNodesParams = nodesParams // represents static nodes parameters
+
+// Identifies the .json files exported by the learning module, to be shared between MEDiml users
+const SCENE_FILE_FORMAT = "mediml-learning-scene"
+const SCENE_FILE_VERSION = 1
+
+// Key of a node in nodesParams.learningMEDiml, as used by updateScene to restore its setupParam
+const getSetupParamKey = (node) => node.name?.toLowerCase().replaceAll(" ", "_").replaceAll("-", "_")
+
+/**
+ * @returns {Promise<{name: String, content: Object}|null>} the selected .json file and its parsed content, null if cancelled
+ * @description Opens a file dialog to select a .json file. Rejects if the file is not valid JSON.
+ */
+const pickJsonFile = () => {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.accept = ".json,application/json"
+    input.addEventListener("cancel", () => resolve(null))
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return resolve(null)
+      try {
+        resolve({ name: file.name, content: JSON.parse(await file.text()) })
+      } catch (error) {
+        reject(new Error(`${file.name} is not a valid JSON file`))
+      }
+    }
+    input.click()
+  })
+}
+
+/**
+ * @param {Object} json content of an exported scene file, or of a scene's metadata.json
+ * @returns {Object} the scene ({ nodes, edges, viewport }) to load in the learning module
+ * @description Throws an error with a message for the user if the file is not a learning scene
+ */
+const parseSceneFile = (json) => {
+  if (json?.format !== undefined && json.format !== SCENE_FILE_FORMAT) {
+    throw new Error("This file is not a MEDiml learning scene")
+  }
+  // A raw metadata.json holds the scene itself, sometimes wrapped in an array
+  let scene = json?.format === SCENE_FILE_FORMAT ? json.scene : json
+  if (Array.isArray(scene)) scene = scene[0]
+  if (!scene || !Array.isArray(scene.nodes) || !Array.isArray(scene.edges)) {
+    throw new Error("This file is not a MEDiml learning scene: nodes or edges are missing")
+  }
+  const unknownNodes = scene.nodes.filter((node) => !node.data?.internal || !staticNodesParams.learningMEDiml[getSetupParamKey(node)])
+  if (unknownNodes.length > 0) {
+    const names = [...new Set(unknownNodes.map((node) => node.name || node.type || node.id))].join(", ")
+    throw new Error(`This scene contains nodes the learning module does not support (${names}). Extraction scenes can only be imported in the extraction module.`)
+  }
+  const nodeIds = new Set(scene.nodes.map((node) => node.id))
+  if (scene.edges.some((edge) => !nodeIds.has(edge.source) || !nodeIds.has(edge.target))) {
+    throw new Error("This scene is corrupted: some connections link to missing nodes")
+  }
+  scene.viewport = scene.viewport || { x: 0, y: 0, zoom: 1 }
+  return scene
+}
 
 /**
  * @param {String} id id of the workflow for multiple workflows management
@@ -1165,6 +1223,71 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
 
   /**
    * @description
+   * Export the scene as a .json file that other MEDiml users can import
+   */
+  const onExportScene = useCallback(() => {
+    if (!reactFlowInstance || nodes.length === 0) {
+      toast.warn("No scene to export!")
+      return
+    }
+    const flow = deepCopy(reactFlowInstance.toObject())
+    flow.nodes.forEach((node) => {
+      // setupParam is restored from nodesParams on import
+      node.data.setupParam = null
+      node.data.enableView = false
+      // The results point to files on this computer, they are not shared
+      delete node.data.internal?.results
+      // Interaction flags set while the experiment runs (see onRun)
+      delete node.draggable
+      delete node.selectable
+      delete node.connectable
+      delete node.selected
+    })
+    flow.edges.forEach((edge) => {
+      delete edge.animated
+      delete edge.selectable
+      delete edge.selected
+    })
+    const sceneName = medDataStore.snapshot()[pageId]?.name?.split(".mediml")[0] || "scene"
+    downloadFile(
+      { format: SCENE_FILE_FORMAT, version: SCENE_FILE_VERSION, sceneName, exportedAt: new Date().toISOString(), scene: flow },
+      `${sceneName}.mediml.json`
+    )
+  }, [reactFlowInstance, nodes, pageId])
+
+  /**
+   * @description
+   * Replace the scene with one imported from a .json file exported by another MEDiml user
+   */
+  const onImportScene = useCallback(async () => {
+    let file
+    try {
+      file = await pickJsonFile()
+    } catch (error) {
+      toast.error(error.message)
+      return
+    }
+    if (!file) return
+
+    let scene
+    try {
+      scene = parseSceneFile(file.content)
+    } catch (error) {
+      toast.error(error.message)
+      return
+    }
+    if (nodes.length > 0 && !confirm(`Importing ${file.name} will replace the current scene.\nUnsaved changes will be lost.`)) {
+      return
+    }
+    updateScene(scene)
+    // Imported scenes come without results
+    setIsResults(false)
+    setShowResultsPane(false)
+    toast.success(`Scene imported from ${file.name}. Save the scene to keep it.`)
+  }, [nodes])
+
+  /**
+   * @description
    * Set the subflow id to null to go back to the main workflow
    */
   const onBack = useCallback(() => {
@@ -1245,6 +1368,8 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
                     isRunning ? { type: "stop", onClick: onStop } : { type: "run", onClick: onRun, disabled: !canRun },
                     { type: "clear", onClick: onClear },
                     { type: "save", onClick: onSave },
+                    { type: "exportScene", onClick: onExportScene },
+                    { type: "importScene", onClick: onImportScene, disabled: isRunning },
                   ]}
                   op={op}
                 />
