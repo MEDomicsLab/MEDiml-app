@@ -12,9 +12,6 @@
   box-shadow: none;
 }
 
-.card-accordion .accordion-body {
-  color: #161616;
-}
 .card-accordion .accordion-button[aria-expanded="true"] {
   background-color: #d3d3d3 !important;
   color: #161616;
@@ -33,7 +30,6 @@
   margin-bottom: 1px;
   border-radius: 0.5rem;
   border: none;
-  padding-left: 2rem;
   padding: 1rem 2rem;
   font-size: large;
   font-weight: bold;
@@ -45,7 +41,6 @@
 .card-accordion .accordion-header .accordion-button::before {
   left: 0.5rem;
   align-self: center;
-  content: #161616 !important;
 }
 
 .card-accordion .accordion-button:not(.collapsed)::before {
@@ -60,6 +55,8 @@
 }
 
 .card-accordion .accordion-body {
+  /* merged from an earlier duplicate of this selector */
+  color: #161616;
   padding-top: 0.5rem;
   border-bottom-left-radius: 0.5rem;
   border-bottom-right-radius: 0.5rem;

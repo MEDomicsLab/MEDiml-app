@@ -288,7 +288,8 @@ const WorkflowBase = ({ isGoodConnection, groupNodeHandlingDefault, onDeleteNode
         node.data = {
           ...node.data
         }
-        node.draggable = !showResultsPane
+        // boxes are guides of the learning scene, they are never draggable
+        node.draggable = !showResultsPane && node.type !== "boxNode"
         return node
       })
     )

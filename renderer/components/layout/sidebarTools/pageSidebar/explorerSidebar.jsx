@@ -1,18 +1,16 @@
-import React, { useContext } from "react"
+import React from "react"
 import { Accordion, Button, Stack } from "react-bootstrap"
 import { ipcRenderer } from "electron"
 import SidebarDirectoryTreeControlled from "../directoryTree/sidebarDirectoryTreeControlled"
-import { DataContext } from "../../../workspace/dataContext"
+import { medDataStore } from "../../../workspace/medDataStore"
 
 const ExplorerSidebar = () => {
-  const { setGlobalData } = useContext(DataContext)
-
   /**
    * @description - This function is called when the user clicks on the change workspace button
    * @summary - This function sends a message to the main process (Electron) to open a dialog box to change the workspace
    */
   async function handleWorkspaceChange() {
-    setGlobalData({})
+    medDataStore.reset()
     ipcRenderer.send("messageFromNext", "requestDialogFolder")
   }
 

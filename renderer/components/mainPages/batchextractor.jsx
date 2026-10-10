@@ -1,17 +1,22 @@
 import { Button } from 'primereact/button'
 import { Column } from 'primereact/column'
 import { Dialog } from 'primereact/dialog'
-import { Dropdown } from 'primereact/dropdown'
 import { InputSwitch } from 'primereact/inputswitch'
 import { SelectButton } from 'primereact/selectbutton'
 import { TreeTable } from 'primereact/treetable'
 import React, { useContext, useEffect, useRef, useState } from 'react'
-import { Alert, Card, Col, Form, ProgressBar, Row } from 'react-bootstrap'
+import { Alert, Card, Form, ProgressBar } from 'react-bootstrap'
 import { toast } from 'react-toastify'
+import MEDIML_DOCS from '../../utilities/medimlDocs'
 import { requestBackend } from "../../utilities/requests"
 import DocLink from '../extractionMEDiml/docLink'
+import SourcePicker from '../extractionMEDiml/SourcePicker'
 import { ErrorRequestContext } from '../generalPurpose/errorRequestContext'
-import { DataContext } from '../workspace/dataContext'
+import Caption from '../primitives/Caption'
+import Disclosure from '../primitives/Disclosure'
+import SectionCard from '../primitives/SectionCard'
+import Toolbar from '../primitives/Toolbar'
+import { useMEDDataObjectsByType, useMEDDataStore } from '../workspace/useMEDData'
 import { MEDDataObject } from '../workspace/NewMedDataObject'
 import { WorkspaceContext } from "../workspace/workspaceContext"
 import SettingsEditor from "./dataComponents/settingsEditor"
@@ -25,16 +30,55 @@ import SettingsEditor from "./dataComponents/settingsEditor"
  * @description
  * This component is used to display a InputForm.
  */
+/** Default core count. Named so the "n modified" badge on the Advanced section
+ *  compares against a single source of truth rather than a repeated literal. */
+/**
+ * Label, hint and documentation link for the dataset folder, by on-disk format.
+ * Hoisted so the three-way lookup lives in one place rather than being written
+ * out inline beside the control.
+ */
+const EXTRACT_DATASET = {
+  npy: {
+    label: "NPY dataset folder",
+    hint: "Folder containing the MEDscan objects (.npy) to extract features from. These are produced by the DataManager.",
+    doc: MEDIML_DOCS.dataManager
+  },
+  nifti: {
+    label: "NIfTI dataset folder",
+    hint: "Folder containing the NIfTI files (.nii / .nii.gz) to extract features from.",
+    doc: MEDIML_DOCS.inputDataNifti
+  },
+  dicom: {
+    label: "DICOM dataset folder",
+    hint: "Folder containing the DICOM files (.dcm) to extract features from.",
+    doc: MEDIML_DOCS.inputDataDicom
+  }
+}
+
+const DEFAULT_N_CORES = 12
+
+/** Feature categories in the order they are reported, with the prefixes recognizing them (mirrors
+ *  FEATURE_CATEGORIES in MEDimlExtraction.py, which does the actual categorization). */
+const FEATURE_CATEGORIES = [
+  { key: "morph", label: "Morphological", prefixes: "morph_" },
+  { key: "intensity", label: "Intensity", prefixes: "locInt_, stats_, intHist_, intVolHist_" },
+  { key: "texture", label: "Texture", prefixes: "glcm_, glrlm_, glszm_, ngldm_, gldzm_, ngtdm_" },
+  { key: "unknown", label: "Unknown", prefixes: "any other prefix" }
+]
+
 const BatchExtractor = ({ pageId, configPath = "" }) => {
   const { port } = useContext(WorkspaceContext) // Get the port of the backend
-  const { globalData } = useContext(DataContext) // Get the global data of the workspace
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
+  // Re-run the folder/csv/settings list updates only when the set of relevant files actually
+  // changes, instead of on every unrelated workspace change.
+  const relevantIds = useMEDDataObjectsByType(["directory", "csv", "json", "txt"])
   const { setError } = useContext(ErrorRequestContext) // Get the function to set the error request
   const [progress, setProgress] = useState(0)
   const [loadingEdit, setLoadingEdit] = useState(false)
   const [refreshEnabled, setRefreshEnabled] = useState(false) // A boolean variable to control refresh
   const [selectedReadFolder, setSelectedReadFolder] = useState('')
   const [selectedSaveFolder, setSelectedSaveFolder] = useState('')
-  const [selectedNBatch, setSelectedNBatch] = useState(12)
+  const [selectedNBatch, setSelectedNBatch] = useState(DEFAULT_N_CORES)
   const [selectedCSVFile, setSelectedCSVFile] = useState('')
   const [selectedSettingsFile, setSelectedSettingsFile] = useState('')
   const [listWSFolders, setListWSFolders] = useState([]) // List of folders in the workspace
@@ -54,20 +98,28 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
   const [selectedPredDosesCSV, setSelectedPredDosesCSV] = useState('') // Path to CSV file containing prescribed doses per patient
   const [prescDoseColumn, setPrescDoseColumn] = useState('') // Column name for prescribed dose values in pred_doses_csv
   const csvFileInputRef = useRef(null) // Used to reset the local ROI CSV file input, since the file is optional
+  const [listTXTFiles, setListTXTFiles] = useState([]) // List of txt files in the workspace
+  const [categorizeCSVFile, setCategorizeCSVFile] = useState('') // Radiomics table to categorize
+  const [categorizeTXTFile, setCategorizeTXTFile] = useState('') // Definitions file of the radiomics table
+  const [categorizing, setCategorizing] = useState(false)
+  const [categorizeResults, setCategorizeResults] = useState(null) // Features count and saved files per category
 
   useEffect(() => {
     updateWSfolder()
     updateCSVFilesList()
     updateSettingsFilesList()
+    updateTXTFilesList()
   }, [])
-  
+
   useEffect(() => {
     updateWSfolder()
     updateCSVFilesList()
     updateSettingsFilesList()
-  }, [globalData])
+    updateTXTFilesList()
+  }, [relevantIds])
 
   const updateWSfolder = () => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let wsFolders = []
@@ -81,6 +133,7 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
   }
 
   const updateCSVFilesList = () => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let csvFiles = []
@@ -94,6 +147,7 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
   }
 
   const updateSettingsFilesList = () => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let settingsFiles = []
@@ -103,6 +157,19 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
         }
       })
       setListSettingsFiles(settingsFiles)
+    }
+  }
+
+  const updateTXTFilesList = () => {
+    const globalData = medDataStore.snapshot()
+    if (globalData !== undefined) {
+      let txtFiles = []
+      Object.keys(globalData).forEach((key) => {
+        if (globalData[key].type === "txt") {
+          txtFiles.push({ name: globalData[key].name, value: globalData[key].path })
+        }
+      })
+      setListTXTFiles(txtFiles)
     }
   }
 
@@ -308,6 +375,66 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
     shell.openPath(saveFolder);
   }
 
+  /**
+   * @description Selects the radiomics table to categorize, and its definitions file when MEDiml saved
+   * it next to the table under the same name, as it does by default.
+   * @param {string} csvPath - The path of the radiomics table
+   */
+  const selectCategorizeCSV = (csvPath) => {
+    setCategorizeCSVFile(csvPath)
+    setCategorizeResults(null)
+    const txtPath = csvPath ? csvPath.replace(/\.csv$/i, '.txt') : ''
+    if (txtPath && fs.existsSync(txtPath)) {
+      setCategorizeTXTFile(txtPath)
+    }
+  }
+
+  const handleCategorizeCSVChange = (event) => {
+    if (event.target.files.length > 0) {
+      selectCategorizeCSV(event.target.files[0].path)
+    }
+  }
+
+  const handleCategorizeTXTChange = (event) => {
+    if (event.target.files.length > 0) {
+      setCategorizeTXTFile(event.target.files[0].path)
+      setCategorizeResults(null)
+    }
+  }
+
+  const handleCategorizeClick = () => {
+    setCategorizing(true)
+    setCategorizeResults(null)
+    requestBackend(
+      port,
+      '/extraction_MEDiml/run_all/be_categorize',
+      { path_csv: categorizeCSVFile, path_txt: categorizeTXTFile },
+      (response) => {
+        setCategorizing(false)
+        MEDDataObject.updateWorkspaceDataObject()
+        if (response.error) {
+          console.error('Error:', response.error)
+          toast.error('Error: ' + response.error)
+          // eslint-disable-next-line no-prototype-builtins
+          if (!response.error.hasOwnProperty('message')) {
+            setError({"message": response.error})
+          } else {
+            setError(response.error)
+          }
+        } else {
+          setCategorizeResults(response)
+          const nCategories = Object.keys(response.categories).length
+          toast.success(`Features split into ${nCategories} categor${nCategories === 1 ? 'y' : 'ies'}!`)
+        }
+      },
+      (error) => {
+        setCategorizing(false)
+        console.error('Error:', error)
+        toast.error('Error: ' + error)
+      }
+    )
+  }
+
   const handleRunClick = async () => {
 
     // Create an object with the input values
@@ -507,318 +634,242 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
     {renderResults()}
     {renderEdit()}
     <div>
-    <Card className="text-center">
+    <Card>
       <Card.Body>
         <Card.Header>
           <h4>Batch Extractor - Radiomics</h4>
-          <DocLink 
-            linkString={"https://mediml.readthedocs.io/en/latest/tutorials.html#batchextractor"} 
-            name={"What is BatchExtractor?"} 
-            image={"https://www.svgrepo.com/show/521262/warning-circle.svg"} 
+          <DocLink
+            linkString={"https://mediml.readthedocs.io/en/latest/tutorials.html#batchextractor"}
+            name={"What is BatchExtractor?"}
+            image={"https://www.svgrepo.com/show/521262/warning-circle.svg"}
           />
         </Card.Header>
 
-      <Form method="post" encType="multipart/form-data" className="inputFile">
-
       {/* Check whether to use the workspace or not*/}
-      <Row className="form-group-box">
-        <Form.Label htmlFor="file">Use current workspace data</Form.Label>
-        <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>If this is checked, the data available in the workspace will be used instead of local data.</p>
-        <Col style={{ width: "150px" }}>
-          <InputSwitch
-            checked={useWorkspace}
-            onChange={(e) => setUseWorkspace(e.value)}
-          />
-        </Col>
-      </Row>
+      <SectionCard
+        row
+        align="center"
+        title="Use current workspace data"
+        hint="Read the dataset, ROI CSV and settings file from the current workspace instead of picking them from disk."
+      >
+        <InputSwitch
+          checked={useWorkspace}
+          onChange={(e) => setUseWorkspace(e.value)}
+        />
+      </SectionCard>
 
       {/* Ask user if he is analyzing dose metrics*/}
-      <Row className="form-group-box">
-        <Form.Label htmlFor="file">Analyzing dose maps?</Form.Label>
-        <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-          If this is checked, dose metrics will be extracted.
-        </p>
-        <Col style={{ width: "150px" }}>
-          <InputSwitch
-            checked={analyzeDoseMaps}
-            onChange={(e) => setAnalyzeDoseMaps(e.value)}
-          />
-        </Col>
-      </Row>
+      <SectionCard
+        row
+        align="center"
+        title="Analyze dose maps"
+        hint="Extract dosiomics features in addition to radiomics. Requires a CSV of prescribed doses per patient, configured below."
+      >
+        <InputSwitch
+          checked={analyzeDoseMaps}
+          onChange={(e) => setAnalyzeDoseMaps(e.value)}
+        />
+      </SectionCard>
 
       {analyzeDoseMaps && (
         <>
-          <Row className="form-group-box">
-            <Col md={6}>
-              <Form.Label className="pred-doses-csv" htmlFor="file">
-                Prescribed doses CSV file
-              </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-                Path to the CSV file containing prescribed doses per patient. The file must include a PatientID column.
-              </p>
-              {useWorkspace ? (
-                <Dropdown
-                  style={{ maxWidth: "100%", height: "auto", width: "100%" }}
-                  filter
-                  value={selectedPredDosesCSV}
-                  onChange={(e) => setSelectedPredDosesCSV(e.value)}
-                  options={listCSVFiles}
-                  optionLabel="name"
-                  display="chip"
-                  placeholder="Select a file"
-                />
-              ) : (
-                <Form.Group controlId="enterPredDosesFile">
-                  <Form.Control
-                    name="pred_doses_csv"
-                    accept='.csv'
-                    type="file"
-                    onChange={handlePredDosesCSVChange}
-                  />
-                </Form.Group>
-              )}
-            </Col>
-            <Col md={6}>
-              <Form.Label className="presc-dose-column" htmlFor="presc_dose_column">
-                Prescribed dose column name
-              </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-                Name of the column in the prescribed doses CSV that contains the prescription dose value for each patient.
-              </p>
-              <Form.Group controlId="prescDoseColumn">
-                <Form.Control
-                  name="presc_dose_column"
-                  type="text"
-                  value={prescDoseColumn}
-                  placeholder="e.g. PrescriptionDose"
-                  onChange={(event) => setPrescDoseColumn(event.target.value)}
-                />
-              </Form.Group>
-            </Col>
-          </Row>
-  
+          <SectionCard
+            row
+            title="Prescribed doses CSV"
+            hint="CSV file giving the prescribed dose per patient. It must include a PatientID column, plus the dose column named below."
+          >
+            <SourcePicker
+              mode={useWorkspace ? "workspace" : "local"}
+              kind="file"
+              accept=".csv"
+              name="pred_doses_csv"
+              options={listCSVFiles}
+              value={selectedPredDosesCSV}
+              onWorkspaceChange={setSelectedPredDosesCSV}
+              onLocalChange={handlePredDosesCSVChange}
+              placeholder="Select a file"
+            />
+          </SectionCard>
+
+          <SectionCard
+            row
+            align="center"
+            title="Dose column name"
+            hint="Name of the column in the prescribed doses CSV holding the prescription dose for each patient."
+          >
+            <Form.Control
+              name="presc_dose_column"
+              type="text"
+              value={prescDoseColumn}
+              placeholder="e.g. PrescriptionDose"
+              onChange={(event) => setPrescDoseColumn(event.target.value)}
+              aria-label="Prescribed dose column name"
+            />
+          </SectionCard>
         </>
       )}
 
-      <Row className="form-group-box">
-        {/* UPLOAD DATASET FOLDER */}
+      {/* DATASET FORMAT */}
+      <SectionCard
+        row
+        align="center"
+        title="Dataset format"
+        hint="Which on-disk format the scans are in. NPY means MEDscan objects produced by the DataManager."
+        docHref={MEDIML_DOCS.inputData}
+      >
         <SelectButton
           value={useDatasetType}
           onChange={(e) => setUseDatasetType(e.value)}
           optionLabel="label"
           options={[
-            { label: 'Use NPY', value: "npy" },
-            { label: 'Use NIfTI', value: "nifti" },
-            { label: 'Use DICOM', value: "dicom" }
+            { label: 'NPY', value: "npy" },
+            { label: 'NIfTI', value: "nifti" },
+            { label: 'DICOM', value: "dicom" }
           ]}
-          style={{ width: '100%', marginBottom: '10px' }}
         />
-        <Col>
-          <Form.Label className="npy-folder" htmlFor="file">
-            {{
-              npy: 'NPY dataset folder (MEDscan objects)',
-              nifti: 'NIfTI dataset folder',
-              dicom: 'DICOM dataset folder'
-            }[useDatasetType]}
-          </Form.Label>
-          <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-            {{
-              npy: 'Path to the folder containing the NPY dataset to use for radiomics features extraction',
-              nifti: 'Path to the folder containing the NIfTI dataset to use for radiomics features extraction',
-              dicom: 'Path to the folder containing the DICOM dataset to use for radiomics features extraction'
-            }[useDatasetType]}
-          </p>
-          {useWorkspace ? (
-            <Col>
-              <Dropdown
-                style={{ maxWidth: "100%", height: "auto", width: "auto" }}
-                filter
-                value={selectedReadFolder}
-                onChange={(e) => setSelectedReadFolder(e.value)}
-                options={listWSFolders}
-                optionLabel="name"
-                display="chip"
-                placeholder="Select a folder"
-              />
-            </Col>
-          ) : (
-            <Col>
-              <Form.Group controlId="enterFile">
-                <Form.Control
-                  name="path_read"
-                  type="file"
-                  webkitdirectory="true"
-                  directory="true"
-                  onChange={handleReadFolderChange}
-                />
-              </Form.Group>
-            </Col>
-          )}
-        </Col>
-      </Row>
+      </SectionCard>
 
-        {/* UPLOAD SETTINGS FILE*/}
-        <Row className="form-group-box">
-          <Form.Label className="settings-file" htmlFor="file">
-            Settings File
-          </Form.Label>
-          <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Path to the extraction settings file</p>
-          {useWorkspace ? (
-            <Col>
-              <Dropdown
-                style={{ maxWidth: "100%", height: "auto", width: "auto" }}
-                filter
-                value={selectedSettingsFile}
-                onChange={(e) => setSelectedSettingsFile(e.value)}
-                options={listSettingsFiles}
-                optionLabel="name"
-                display="chip"
-                placeholder="Select a file"
-              />
-            </Col>
-             ) : (
-            <Col>
-              <h6>Load a Local File</h6>
-              <Form.Group controlId="enterFile">
-                <Form.Control
-                  accept='.json'
-                  name="path_params"
-                  type="file"
-                  onChange={handleSettingsFileChange}
-                />
-              </Form.Group>
-            </Col>
-            
-            )}
-            <Col>
-            <h6>Edit the selected file</h6>
-              <Button
-                type="button"
-                severity="info"
-                label="Edit"
-                name="EditSettingsButton"
-                onClick={handleEditClick}
-                disabled={(!selectedSettingsFile)}
-                loading={loadingEdit}
-                icon="pi pi-pencil"
-                iconPos="left"
-                raised
-                rounded
-              />
-            </Col>
-        </Row>
-      </Form>  
+      {/* UPLOAD DATASET FOLDER */}
+      <SectionCard
+        row
+        title={EXTRACT_DATASET[useDatasetType].label}
+        hint={EXTRACT_DATASET[useDatasetType].hint}
+        docHref={EXTRACT_DATASET[useDatasetType].doc}
+      >
+        <SourcePicker
+          mode={useWorkspace ? "workspace" : "local"}
+          kind="folder"
+          name="path_read"
+          options={listWSFolders}
+          value={selectedReadFolder}
+          onWorkspaceChange={setSelectedReadFolder}
+          onLocalChange={handleReadFolderChange}
+        />
+      </SectionCard>
+
+      {/* UPLOAD SETTINGS FILE*/}
+      <SectionCard
+        row
+        title="Extraction settings"
+        hint="JSON file describing how features are computed: interpolation, re-segmentation, discretisation, the filters to apply and which feature families to extract."
+        docHref={MEDIML_DOCS.featuresExtraction}
+      >
+        <SourcePicker
+          mode={useWorkspace ? "workspace" : "local"}
+          kind="file"
+          accept=".json"
+          name="path_params"
+          options={listSettingsFiles}
+          value={selectedSettingsFile}
+          onWorkspaceChange={setSelectedSettingsFile}
+          onLocalChange={handleSettingsFileChange}
+          placeholder="Select a file"
+          action={
+            <Button
+              type="button"
+              severity="info"
+              label="Edit"
+              name="EditSettingsButton"
+              onClick={handleEditClick}
+              disabled={(!selectedSettingsFile)}
+              loading={loadingEdit}
+              icon="pi pi-pencil"
+              iconPos="left"
+              raised
+              rounded
+            />
+          }
+        />
+      </SectionCard>
+
 
         {/* UPLOAD CSV FILE*/}
-        <Row className="form-group-box">
-          <Form.Label className="csv-file" htmlFor="file">
-            Path to CSV File (optional)
-          </Form.Label>
-          <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-            Path to the CSV file containing the scans to use for radiomics features extraction with
-            their corresponding Regions of Interest. If no file is given, all the scans found in the
-            dataset folder are extracted, using the union of all the ROIs of each scan.
-          </p>
-          {useWorkspace ? (
-          <Col>
-            <Dropdown
-              style={{ maxWidth: "100%", height: "auto", width: "auto" }}
-              filter
-              showClear
-              value={selectedCSVFile}
-              onChange={(e) => setSelectedCSVFile(e.value || '')}
-              options={listCSVFiles}
-              optionLabel="name"
-              display="chip"
-              placeholder="Select a file (optional)"
-            />
-          </Col> ) :(
-          <Col>
-            <Form.Group controlId="enterFile">
-              <Form.Control
-                name="path_csv"
-                accept='.csv'
-                type="file"
-                ref={csvFileInputRef}
-                onChange={handleCSVFileChange}
-              />
-            </Form.Group>
-            {selectedCSVFile && (
-              <Button
-                type="button"
-                severity="secondary"
-                label="Clear"
-                name="ClearCSVButton"
-                onClick={handleClearCSVFile}
-                icon="pi pi-times"
-                iconPos="left"
-                text
-              />
-            )}
-          </Col>
-          )}
-        </Row>
+        <SectionCard
+          row
+          title="ROI definitions"
+          badge="optional"
+          hint="CSV file listing the scans to extract and their corresponding Regions of Interest. Without it, every scan found in the dataset folder is extracted, using the union of all the ROIs of each scan."
+          docHref={MEDIML_DOCS.roiCsv}
+        >
+          <SourcePicker
+            mode={useWorkspace ? "workspace" : "local"}
+            kind="file"
+            accept=".csv"
+            name="path_csv"
+            options={listCSVFiles}
+            value={selectedCSVFile}
+            onWorkspaceChange={setSelectedCSVFile}
+            onLocalChange={handleCSVFileChange}
+            inputRef={csvFileInputRef}
+            showClear
+            placeholder="Union of all ROIs"
+            action={
+              selectedCSVFile && !useWorkspace ? (
+                <Button
+                  type="button"
+                  severity="secondary"
+                  label="Clear"
+                  name="ClearCSVButton"
+                  onClick={handleClearCSVFile}
+                  icon="pi pi-times"
+                  iconPos="left"
+                  text
+                />
+              ) : null
+            }
+          />
+        </SectionCard>
 
         {/* UPLOAD SAVING FOLDER*/}
-        <Row className="form-group-box">
-          <Form.Label className="save" htmlFor="file">
-            Save folder
-          </Form.Label>
-          <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Folder where the results of the extraction will be saved</p>
-        {useWorkspace ? (
-          <Col>
-            <Dropdown
-              style={{ maxWidth: "100%", height: "auto", width: "auto" }}
-              filter
-              value={selectedSaveFolder}
-              onChange={(e) => setSelectedSaveFolder(e.value)}
-              options={listWSFolders}
-              optionLabel="name"
-              display="chip"
-              placeholder="Select a folder"
-            />
-          </Col> ) :(
-          <Col>
-            <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0", color: "#F88379"}}>
-              Warning: to select a folder, it must contain at least one file, even if it is empty.
-            </p>
-            <Form.Group controlId="enterFile">
-              <Form.Control
-                name="path_save"
-                type="file"
-                webkitdirectory="true"
-                directory="true"
-                onChange={handleSaveFolderChange}
-              />
-            </Form.Group>
-          </Col>
-          )}
-        </Row>
+        <SectionCard
+          row
+          title="Save folder"
+          hint="Where the extracted feature tables and JSON files are written. A sub-folder is created per ROI type."
+        >
+          <SourcePicker
+            mode={useWorkspace ? "workspace" : "local"}
+            kind="folder"
+            name="path_save"
+            options={listWSFolders}
+            value={selectedSaveFolder}
+            onWorkspaceChange={setSelectedSaveFolder}
+            onLocalChange={handleSaveFolderChange}
+            caption={
+              <Caption warn>
+                Warning: to select a folder, it must contain at least one file, even if it is empty.
+              </Caption>
+            }
+          />
+        </SectionCard>
 
-      {/* NUMBER OF BATCH*/}
-      <Row className="form-group-box">
-        <Col>
-        <Form.Group controlId="n_cores" style={{ paddingTop: "10px" }}>
-            <Form.Label 
-              className="ncores">
-                Number of cores to use :
-            </Form.Label>
-            <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Number of cores to use for the parallel extraction of features</p>
-            <Form.Control
-              name="n_cores"
-              type="number"
-              defaultValue={12}
-              placeholder={"Default: " + 12}
-              onChange={handleNBatchChange}
-            />
-        </Form.Group>
-        </Col>
-        <Col style={{display: "flex", flexDirection:"column", justifyContent: "center", alignItems: "center"}}>
-          <Form.Label 
-            className="skip">
-              Skip Existing Extractions :
-          </Form.Label>
-          <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0", textAlign: "center"}}>Skip extractions if they are already present in the save folder</p>
+      {/* NUMBER OF BATCH + SKIP EXISTING */}
+      <Disclosure
+        title="Advanced"
+        modifiedCount={(selectedNBatch !== DEFAULT_N_CORES ? 1 : 0) + (skipExisting ? 1 : 0)}
+      >
+        <SectionCard
+          row
+          align="center"
+          title="Cores"
+          hint="Number of CPU cores used for the parallel extraction of features."
+          docHref={MEDIML_DOCS.generalAnalysisParams}
+        >
+          <Form.Control
+            name="n_cores"
+            type="number"
+            defaultValue={DEFAULT_N_CORES}
+            placeholder={"Default: " + DEFAULT_N_CORES}
+            onChange={handleNBatchChange}
+            aria-label="Number of cores"
+          />
+        </SectionCard>
+
+        <SectionCard
+          row
+          align="center"
+          title="Skip existing extractions"
+          hint="Skip any scan whose features are already present in the save folder."
+        >
           <InputSwitch
             checked={skipExisting}
             onChange={(e) => {
@@ -826,8 +877,8 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
               setActiveIndex(!activeIndex)
             }}
           />
-        </Col>
-      </Row>
+        </SectionCard>
+      </Disclosure>
 
       {/* PROGRESS BAR*/}
       {(refreshEnabled || progress === 100 || progress !== 0) && (
@@ -856,39 +907,130 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
       )}
 
       {/* PROCESS BUTTON*/}
-      <Row className="form-group-box">
-        <Col>
-            <div className="text-center"> {/* Center-align the button */}
-                <Button
-                  severity="success"
-                  label="RUN"
-                  name="ProcessButton"
-                  onClick={handleRunClick}
-                  disabled={(
-                    !selectedReadFolder ||
-                    !selectedSaveFolder ||
-                    refreshEnabled ||
-                    !selectedSettingsFile ||
-                    (analyzeDoseMaps && (!selectedPredDosesCSV || !prescDoseColumn.trim()))
-                  )}
-                  icon="pi pi-play"
-                  raised
-                  rounded
-                />
-            </div>
-          </Col>
-        <Col>
-          <Button
-            severity="secondary"
-            label="Show Results"
-            name="ShowResultsButton"
-            icon="pi pi-list"
-            onClick={handleShowResultsClick}
-            raised
-            rounded 
+      <Toolbar>
+        <Button
+          severity="success"
+          label="RUN"
+          name="ProcessButton"
+          onClick={handleRunClick}
+          disabled={(
+            !selectedReadFolder ||
+            !selectedSaveFolder ||
+            refreshEnabled ||
+            !selectedSettingsFile ||
+            (analyzeDoseMaps && (!selectedPredDosesCSV || !prescDoseColumn.trim()))
+          )}
+          icon="pi pi-play"
+          raised
+          rounded
+        />
+        <Button
+          severity="secondary"
+          label="Show Results"
+          name="ShowResultsButton"
+          icon="pi pi-list"
+          onClick={handleShowResultsClick}
+          raised
+          rounded
+        />
+      </Toolbar>
+      </Card.Body>
+    </Card>
+
+    {/* RADIOMICS FEATURES CATEGORIZATION */}
+    <Card>
+      <Card.Body>
+        <Card.Header>
+          <h4>Batch Extractor - Radiomics Features Categorization</h4>
+          <span>
+            Splits an extracted radiomics table into one table per feature category: Morphological, Intensity and Texture.
+          </span>
+        </Card.Header>
+        <SectionCard
+          row
+          title="Radiomics table"
+          hint="CSV file of the extracted features (e.g. radiomics__PET(GTV)__image.csv), with the radVar1, radVar2, ... columns."
+        >
+          <SourcePicker
+            mode={useWorkspace ? "workspace" : "local"}
+            kind="file"
+            accept=".csv"
+            name="categorize_csv"
+            options={listCSVFiles}
+            value={categorizeCSVFile}
+            onWorkspaceChange={selectCategorizeCSV}
+            onLocalChange={handleCategorizeCSVChange}
+            placeholder="Select a file"
           />
-        </Col>
-        </Row>
+        </SectionCard>
+
+        <SectionCard
+          row
+          title="Features definitions"
+          hint="TXT file linking the table columns to the features names (||radVar1:morph_3D__Fmorph_vol__scale2||...). Filled in automatically when it sits next to the table under the same name."
+        >
+          <SourcePicker
+            mode={useWorkspace ? "workspace" : "local"}
+            kind="file"
+            accept=".txt"
+            name="categorize_txt"
+            options={listTXTFiles}
+            value={categorizeTXTFile}
+            onWorkspaceChange={(path) => {
+              setCategorizeTXTFile(path)
+              setCategorizeResults(null)
+            }}
+            onLocalChange={handleCategorizeTXTChange}
+            placeholder="Select a file"
+            caption={
+              !useWorkspace && categorizeTXTFile ? <Caption>{categorizeTXTFile}</Caption> : null
+            }
+          />
+        </SectionCard>
+
+        {categorizeResults && (
+          <TreeTable
+            value={FEATURE_CATEGORIES.filter((c) => categorizeResults.categories[c.key]).map((c) => ({
+              key: c.key,
+              data: {
+                category: c.label,
+                features: categorizeResults.categories[c.key].n_features,
+                folder: categorizeResults.categories[c.key].folder
+              }
+            }))}
+            className="mt-4"
+            tableStyle={{ minWidth: '25rem' }}
+          >
+            <Column field="category" header="Category"></Column>
+            <Column field="features" header={`Features (${categorizeResults.n_patients} patients)`}></Column>
+            <Column field="folder" header="Saved in"></Column>
+          </TreeTable>
+        )}
+
+        <Toolbar>
+          <Button
+            severity="success"
+            label="CATEGORIZE"
+            name="CategorizeButton"
+            onClick={handleCategorizeClick}
+            disabled={!categorizeCSVFile || !categorizeTXTFile || categorizing}
+            loading={categorizing}
+            icon="pi pi-sitemap"
+            raised
+            rounded
+          />
+          {categorizeResults && (
+            <Button
+              severity="info"
+              label="Open folder"
+              name="OpenCategoriesFolderButton"
+              icon="pi pi-folder-open"
+              onClick={() => require('electron').shell.openPath(require('path').dirname(categorizeCSVFile))}
+              raised
+              rounded
+            />
+          )}
+        </Toolbar>
       </Card.Body>
     </Card>
   </div>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useContext } from "react"
 //import { connectToMongoDB } from "../mongoDB/mongoDBUtils"
 import Iframe from "react-iframe"
-import { DataContext } from "../workspace/dataContext"
+import { useMEDDataStore } from "../workspace/useMEDData"
 import { MEDDataObject } from "../workspace/NewMedDataObject"
 import { WorkspaceContext } from "../workspace/workspaceContext"
 import { toLocalPath } from "../../utilities/fileManagementUtils"
@@ -12,10 +12,12 @@ import { toLocalPath } from "../../utilities/fileManagementUtils"
  */
 const HtmlViewer = ({ config }) => {
   const [localPath, setLocalPath] = useState(undefined)
-  const { globalData } = useContext(DataContext)
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
   const { workspace } = useContext(WorkspaceContext)
 
   useEffect(() => {
+    const globalData = medDataStore.snapshot()
+
     async function onMount(medObject) {
       // We need to have a local file to display it
       if (!medObject.inWorkspace) {

@@ -1,14 +1,13 @@
 import { randomUUID } from "crypto"
 import Path from "path"
-import { useContext, useEffect, useState } from "react"
+import { useContext } from "react"
 import { toast } from "react-toastify"
 import { sceneDescription as extractionMEDimlSceneDescription } from "../../../../public/setupVariables/extractionMEDimlNodesParams"
 import { sceneDescription as learningMEDimlDefaultSettings } from "../../../../public/setupVariables/learningMEDimlNodesParams"
 import { loadJsonPath } from "../../../../utilities/fileManagementUtils"
 import { insertMEDDataObjectIfNotExists } from "../../../mongoDB/mongoDBUtils"
 import { MEDDataObject } from "../../../workspace/NewMedDataObject"
-import { DataContext } from "../../../workspace/dataContext"
-import { WorkspaceContext } from "../../../workspace/workspaceContext"
+import { useMEDDataStore } from "../../../workspace/useMEDData"
 import FileCreationBtn from "../fileCreationBtn"
 import { LayoutModelContext } from "../../layoutContext"
 import { fromJSONtoTree } from "../directoryTree/utils"
@@ -30,32 +29,36 @@ const typeInfo = {
  * @returns {JSX.Element} - This component is the sidebar tools component that will be used in the sidebar component as the learning page
  */
 const FlowSceneSidebar = ({ type }) => {
-  const { workspace } = useContext(WorkspaceContext) // We get the workspace from the context to retrieve the directory tree of the workspace, thus retrieving the data files
-  const [experimentList, setExperimentList] = useState([]) // We initialize the experiment list state to an empty array
-  const { globalData } = useContext(DataContext)
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
   const { dispatchLayout } = useContext(LayoutModelContext)
   const isProd = process.env.NODE_ENV === "production"
 
-  // We use the useEffect hook to update the experiment list state when the workspace changes
-  useEffect(() => {
+  // Computed fresh from the store on every call (instead of a useEffect-derived, potentially
+  // stale state), since this is only ever needed synchronously inside checkIsNameValid below.
+  const getExperimentList = () => {
+    const experimentsNode = medDataStore.get("EXPERIMENTS")
     let localExperimentList = []
-    for (const experimentId of globalData["EXPERIMENTS"].childrenIDs) {
-      if (globalData[experimentId].name === "EXTRACTION" && type === "extractionMEDiml") {
-        for (const sceneId of globalData[experimentId].childrenIDs) {
-          localExperimentList.push(globalData[sceneId].name)
+    if (!experimentsNode) return localExperimentList
+    for (const experimentId of experimentsNode.childrenIDs) {
+      const experimentNode = medDataStore.get(experimentId)
+      if (!experimentNode) continue
+      if (experimentNode.name === "EXTRACTION" && type === "extractionMEDiml") {
+        for (const sceneId of experimentNode.childrenIDs) {
+          localExperimentList.push(medDataStore.get(sceneId)?.name)
         }
-      } else if (globalData[experimentId].name === "LEARNING" && type === "learningMEDiml") {
-        for (const sceneId of globalData[experimentId].childrenIDs) {
-          localExperimentList.push(globalData[sceneId].name)
+      } else if (experimentNode.name === "LEARNING" && type === "learningMEDiml") {
+        for (const sceneId of experimentNode.childrenIDs) {
+          localExperimentList.push(medDataStore.get(sceneId)?.name)
         }
       } else {
-        localExperimentList.push(globalData[experimentId].name)
+        localExperimentList.push(experimentNode.name)
       }
     }
-    setExperimentList(localExperimentList)
-  }, [workspace, globalData]) // We log the workspace when it changes
+    return localExperimentList
+  }
 
   const checkIsNameValid = (name) => {
+    const experimentList = getExperimentList()
     return name != "" && !experimentList.includes(name) && !name.includes(" ")
   }
 
@@ -64,6 +67,7 @@ const FlowSceneSidebar = ({ type }) => {
     let extractionFolder = null
     let learningExists = false
     let learningFolder = null
+    const globalData = medDataStore.snapshot()
     let keys = Object.keys(globalData)
     keys.forEach((key) => {
       if (globalData[key].type === "directory" && globalData[key].parentID === "EXPERIMENTS" && globalData[key].name === "EXTRACTION") {

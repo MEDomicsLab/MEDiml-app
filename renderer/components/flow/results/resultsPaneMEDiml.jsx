@@ -5,9 +5,7 @@ import { Column } from 'primereact/column'
 import { DataTable } from 'primereact/datatable'
 import { Image } from 'primereact/image'
 import { Message } from 'primereact/message'
-import { OverlayPanel } from 'primereact/overlaypanel'
 import { Panel } from 'primereact/panel'
-import { SelectButton } from "primereact/selectbutton"
 import { Splitter, SplitterPanel } from 'primereact/splitter'
 import { useContext, useEffect, useRef, useState } from "react"
 import { Col, Row } from "react-bootstrap"
@@ -18,9 +16,31 @@ import Fullscreen from "yet-another-react-lightbox/plugins/fullscreen"
 import Zoom from "yet-another-react-lightbox/plugins/zoom"
 import "yet-another-react-lightbox/styles.css"
 import { requestBackend } from "../../../utilities/requests"
+import { ErrorRequestContext } from "../../generalPurpose/errorRequestContext"
+import { PageInfosContext } from "../../mainPages/moduleBasics/pageInfosContext"
 import { EXPERIMENTS, WorkspaceContext } from "../../workspace/workspaceContext"
+import { FlowFunctionsContext } from "../context/flowFunctionsContext"
 import { FlowInfosContext } from "../context/flowInfosContext"
 import { FlowResultsContext } from "../context/flowResultsContext"
+
+/**
+ * @param {string} pipelineKey key of a pipeline in the results (e.g. "pipeline2")
+ * @param {Array} pipelines pipelines returned by the backend ({pipeline, id, path_study})
+ * @returns {Object} the pipeline entry of the results key, it links the results to the scene's nodes
+ */
+const getPipelineEntry = (pipelineKey, pipelines) => {
+  const pipelineId = parseInt(pipelineKey.replace("pipeline", ""))
+  return pipelines.find((pipeline) => pipeline.id === pipelineId)
+}
+
+/**
+ * @param {Object|string} error error returned by the backend
+ * @returns {string} message to display to the user
+ */
+const getErrorMessage = (error) => {
+  if (typeof error === "string") return error
+  return error?.toast || error?.message || "Unknown error"
+}
 
 /**
  *
@@ -34,28 +54,31 @@ const ResultsPaneMEDiml = () => {
   const { selectedResultsId, setSelectedResultsId, flowResults, showResultsPane, setShowResultsPane, isResults } = useContext(FlowResultsContext)
   const [selectedResults, setSelectedResults] = useState([])
   const [selectedPipelines, setSelectedPipelines] = useState([])
-  const [generatedPipelines, setGeneratedPipelines] = useState([])
-  const [isGenerating, setIsGenerating] = useState(false)
+  const [finalModels, setFinalModels] = useState({}) // final model of each finalized pipeline, by results key
+  const [generatingPipeline, setGeneratingPipeline] = useState(null) // results key of the pipeline being generated
+  const [finalizingPipeline, setFinalizingPipeline] = useState(null) // results key of the pipeline being finalized
   const { flowContent, sceneName } = useContext(FlowInfosContext)
+  const { updateNode } = useContext(FlowFunctionsContext)
+  const { pageId } = useContext(PageInfosContext)
+  const { setError, setShowError } = useContext(ErrorRequestContext)
+  const flowContentRef = useRef(flowContent) // latest scene, read when a request completes
+  flowContentRef.current = flowContent
   const [expNames, setExpNames] = useState([])
   const [compareMode, setCompareMode] = useState(false)
   const [showMetrics, setShowMetrics] = useState(true)
   const [histogramImages, setHistogramImages] = useState([])
   const [heatMap, setHeatMap] = useState()
   const [treePlot, setTreePlot] = useState("")
-  const [open, setOpen] = useState(false)
+  const [histogramsByPipeline, setHistogramsByPipeline] = useState({}) // histogram images of each pipeline, by results key
+  const [lightboxSrc, setLightboxSrc] = useState(null) // image displayed in the zoomable lightbox
   const { getBasePath, port } = useContext(WorkspaceContext)
 
-  const op = useRef(null);
-
   /*
-  * @Description: This function is used to get the save path for the generated notebook
+  * @Description: This function is used to get the path of a folder of the scene (e.g. "notebooks", "models")
   */
-  const getSavePath = (flowContent) => {
+  const getScenePath = (folder) => {
     try {
-      let savePath = null
-      savePath = [getBasePath(EXPERIMENTS), "LEARNING", sceneName, "notebooks"].join("/")
-      return savePath
+      return [getBasePath(EXPERIMENTS), "LEARNING", sceneName, folder].join("/")
     } catch (error) {
       console.error("Error while getting the save path:", error)
       return null
@@ -120,22 +143,6 @@ const ResultsPaneMEDiml = () => {
         }
       })
 
-      // extract selected pipelines
-      let pipIndexes = generatedPipelines.map((pipName) => expNames.indexOf(pipName))
-      let pipsToGenerate = pipIndexes.map((pipIndex) => selectedPipelines[pipIndex])
-
-      // Get notebook save path
-      let notebookSavePath = getSavePath(flowContent)
-      if (!notebookSavePath) {
-        throw new Error("Notebook save path not found");
-      }
-      modifiedFlow = {
-        ...modifiedFlow,
-        "pipelines": pipsToGenerate,
-        "pipeline_names": generatedPipelines,
-        "save_path": notebookSavePath
-      };
-
       return modifiedFlow;
     }
     catch (error) {
@@ -145,19 +152,35 @@ const ResultsPaneMEDiml = () => {
   };
 
   /*
-  * @Description: This function is used to generate the code of the selected pipelines
+  * @Description: This function is used to generate the code of a pipeline
+  * @param {string} pipelineKey results key of the pipeline (e.g. "pipeline1")
+  * @param {Object} pipelineEntry pipeline entry of the results ({pipeline, id})
+  * @param {string} expName experiment name of the pipeline
   */
-  const generateCode = () => {
-    if (generatedPipelines.length == 0){
+  const generateCode = (pipelineKey, pipelineEntry, expName) => {
+    if (!pipelineEntry){
       toast.error("No pipeline selected");
       return;
     } else {
       try {
-        // Loading state
-        setIsGenerating(true)
+        // Get notebook save path
+        let notebookSavePath = getScenePath("notebooks")
+        if (!notebookSavePath) {
+          throw new Error("Notebook save path not found");
+        }
 
         // Process data
         let newFlow = processFlowData(flowContent)
+        if (!newFlow) return
+        newFlow = {
+          ...newFlow,
+          "pipelines": [pipelineEntry],
+          "pipeline_names": [expName],
+          "save_path": notebookSavePath
+        }
+
+        // Loading state
+        setGeneratingPipeline(pipelineKey)
         console.log("newFlow sent to backend", newFlow)
         requestBackend(
           port,
@@ -165,7 +188,7 @@ const ResultsPaneMEDiml = () => {
           newFlow,
           (response) => {
             console.log("received results:", response)
-            setIsGenerating(false)
+            setGeneratingPipeline(null)
             if (!response.error) {
               console.log("Success response", response)
               toast.success("Notebook(s) generated successfully")
@@ -194,16 +217,165 @@ const ResultsPaneMEDiml = () => {
             }
             },
             (error) => {
-              setIsGenerating(false)
+              setGeneratingPipeline(null)
               toast.error("Error detected while running the experiment", error)
           }
         )
       } catch (error) {
-        setIsGenerating(false)
+        setGeneratingPipeline(null)
         toast.error("Error detected while generating the code", error)
         console.error("Error detected while generating the code", error)
       }
     }
+  }
+
+  /*
+  * @Description: Stores the final model of a pipeline in the results of the Analyze node, so it is saved with the scene
+  */
+  const storeFinalModel = (pipelineKey, finalModel) => {
+    const analyzeNode = flowContentRef.current?.nodes?.find((node) => node.type === "Analyze")
+    if (!analyzeNode) return
+    const results = analyzeNode.data.internal.results || {}
+    updateNode({
+      id: analyzeNode.id,
+      updatedData: {
+        ...analyzeNode.data.internal,
+        results: {
+          ...results,
+          final_models: { ...(results.final_models || {}), [pipelineKey]: finalModel }
+        }
+      }
+    })
+  }
+
+  /*
+  * @Description: Resends the run_all request of the scene to train the final model of a pipeline
+  * on the whole learning set, and evaluate it on the holdout set
+  * @param {string} pipelineKey results key of the pipeline (e.g. "pipeline1")
+  * @param {Object} pipelineEntry pipeline entry of the results ({pipeline, id, path_study})
+  */
+  const finalizeModel = (pipelineKey, pipelineEntry) => {
+    try {
+      const modelsPath = getScenePath("models")
+      if (!modelsPath) {
+        throw new Error("Models save path not found")
+      }
+      const newFlow = processFlowData(flowContent)
+      if (!newFlow) return
+
+      setFinalizingPipeline(pipelineKey)
+      requestBackend(
+        port,
+        "/learning_MEDiml/run_all/" + pageId,
+        {
+          ...newFlow,
+          finalize_model: true,
+          pipeline: pipelineEntry.pipeline,
+          path_study: pipelineEntry.path_study,
+          models_path: modelsPath
+        },
+        (response) => {
+          setFinalizingPipeline(null)
+          if (!response.error) {
+            storeFinalModel(pipelineKey, response.final_model)
+            toast.success(`Final model of pipeline ${pipelineEntry.id} trained successfully`)
+          } else {
+            toast.error(getErrorMessage(response.error))
+            console.error("error", response.error)
+            setError(response.error)
+            setShowError(true)
+          }
+        },
+        (error) => {
+          setFinalizingPipeline(null)
+          toast.error("Error detected while finalizing the model", error)
+          console.error("Error detected while finalizing the model", error)
+        }
+      )
+    } catch (error) {
+      setFinalizingPipeline(null)
+      toast.error("Error detected while finalizing the model", error)
+      console.error("Error detected while finalizing the model", error)
+    }
+  }
+
+  /*
+  * @Description: This function is used to render the actions of a pipeline (code generation, model finalization)
+  */
+  const renderPipelineActions = (pipelineKey, pipelineEntry, expName) => {
+    const isBusy = generatingPipeline !== null || finalizingPipeline !== null
+    const header = pipelineEntry ? `Pipeline ${pipelineEntry.id}: ${expName}` : expName
+    let finalizeTooltip = "Retrain a final model on the whole learning set and evaluate it on the holdout set"
+    if (!pipelineEntry?.path_study) {
+      finalizeTooltip = "Run the experiment again to enable the model finalization"
+    }
+    // Buttons on the left, title on the right. Clicks on the buttons must not toggle the accordion.
+    return (
+      <div className="d-flex flex-grow-1 justify-content-between align-items-center gap-2">
+        <div className="fw-bold">{header}</div>
+        <div className="d-flex gap-2 text-end">
+          <Button
+            label="Generate"
+            severity="secondary"
+            size="small"
+            rounded
+            raised
+            icon="pi pi-code"
+            onClick={(event) => {
+              event.stopPropagation()
+              generateCode(pipelineKey, pipelineEntry, expName)
+            }}
+            disabled={!isResults || !pipelineEntry || isBusy}
+            loading={generatingPipeline === pipelineKey}
+          />
+          <Button
+            label="Finalize Model"
+            severity="info"
+            size="small"
+            rounded
+            raised
+            icon="pi pi-check-circle"
+            onClick={(event) => {
+              event.stopPropagation()
+              finalizeModel(pipelineKey, pipelineEntry)
+            }}
+            disabled={!isResults || !pipelineEntry?.path_study || isBusy}
+            loading={finalizingPipeline === pipelineKey}
+            tooltip={finalizeTooltip}
+            tooltipOptions={{ position: "bottom", showOnDisabled: true }}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  /*
+  * @Description: This function is used to render the final model of a pipeline (paths and holdout metrics)
+  */
+  const renderFinalModel = (finalModel, pipelineKey) => {
+    const holdout = finalModel.holdout
+    // Only simple values can be displayed in the table
+    const metricsKeys = holdout ? Object.keys(holdout).filter((key) => holdout[key] === null || typeof holdout[key] !== "object") : []
+    return (
+      <Accordion key={`AccordionTab-FinalModel-${pipelineKey}`}>
+        <AccordionTab disabled={!isResults} header={"Final Model"}>
+          <div className="text-start mb-2">
+            <div><b>Model:</b> {finalModel.model_copy_path || finalModel.model_path}</div>
+            {finalModel.model_copy_path && (<div><b>Study copy:</b> {finalModel.model_path}</div>)}
+            <div><b>Patients:</b> {finalModel.n_train} in the learning set, {finalModel.n_holdout} in the holdout set</div>
+          </div>
+          {metricsKeys.length > 0 ? (
+            <DataTable value={[holdout]}>
+              {metricsKeys.map((key, columnIndex) => (
+                <Column key={key} field={key} header={key} style={columnIndex % 2 !== 0 && { backgroundColor: 'lightblue' }}/>
+              ))}
+            </DataTable>
+          ) : (
+            <Message severity="info" text="No holdout set available: the final model was trained on the whole learning set without holdout evaluation."/>
+          )}
+        </AccordionTab>
+      </Accordion>
+    )
   }
 
   /*
@@ -226,25 +398,34 @@ const ResultsPaneMEDiml = () => {
       return data.map((pipelines, indexPip) => {
         return (
               Object.entries(pipelines).map((item, index) => {
+                // item[0] is the results key of the pipeline (e.g. "pipeline2"), linked to the scene by its pipeline entry
+                const pipelineKey = item[0]
+                const pipelineEntry = getPipelineEntry(pipelineKey, selectedPipelines)
+                const expName = Object.keys(item[1]).find((key) => key !== "analysis")
                 return (
                   <Accordion key={`Accordion-${index+indexPip}`}>
-                    <AccordionTab disabled={!isResults} key={`AccordionTab-${index+indexPip}`} header={Object.keys(item[1])[0]}>
+                    <AccordionTab disabled={!isResults} key={`AccordionTab-${index+indexPip}`} headerTemplate={renderPipelineActions(pipelineKey, pipelineEntry, expName)}>
+                      
                       {renderAccordionTabs(item[1], index, isResults)}
 
+                      {/*Final model*/}
+                      {finalModels[pipelineKey] && renderFinalModel(finalModels[pipelineKey], pipelineKey)}
+
                       {/*Histograms*/}
-                      <Accordion key={`AccordionTab-Histograms-${index+indexPip}`}>
+                      {(histogramsByPipeline[pipelineKey]?.length > 0) && <Accordion key={`AccordionTab-Histograms-${index+indexPip}`}>
                         <AccordionTab disabled={!isResults} key={`AccordionTab-Figures-${index+indexPip}`} header={"Analysis Plots"}>
-                          <Lightbox
-                            open={open}
-                            plugins={[Zoom, Fullscreen]}
-                            close={() => setOpen(false)}
-                            slides={[
-                              { src: histogramImages[indexPip+index] },
-                            ]}
-                            carousel={{ finite: true }}
-                          />
+                          {histogramsByPipeline[pipelineKey].map((src, imageIndex) => (
+                            <img
+                              key={imageIndex}
+                              src={src}
+                              alt="Features importance histogram"
+                              title="Click to zoom"
+                              style={{ maxWidth: "100%", cursor: "zoom-in" }}
+                              onClick={() => setLightboxSrc(src)}
+                            />
+                          ))}
                         </AccordionTab>
-                      </Accordion>
+                      </Accordion>}
                     </AccordionTab>
                   </Accordion>
                 );
@@ -472,6 +653,7 @@ const ResultsPaneMEDiml = () => {
     if (flowContent.nodes) {
       const nativeImage = require("electron").nativeImage
       let histograms = []
+      let histogramsPerPipeline = {}
       flowContent.nodes.map((node) => {
         if (node.type === "Analyze"){
           // Images
@@ -500,22 +682,27 @@ const ResultsPaneMEDiml = () => {
             setSelectedResults(node.data.internal.results.results_avg)
             // Histograms
             try{
+              const loadedPaths = []
               for (let index = 0; index < node.data.internal.results.results_avg.length; index++) {
                 Object.entries(node.data.internal.results.results_avg[index]).map((item, _) => {
+                  // item[0] is the results key of the pipeline (e.g. "pipeline2")
+                  const pipelineHistograms = []
                   Object.entries(item[1]).map((itemAnalysis, _) => {
                     Object.entries(itemAnalysis[1]).map((resultAnalysis, _) => {
                       let result = resultAnalysis[1];
-                          if (result.hasOwnProperty("histogram")){
+                          if (result && result.hasOwnProperty("histogram")){
                             if (result.histogram.hasOwnProperty("path")){
-                              if(!histograms.includes(result.histogram.path)){
-                                const image = nativeImage.createFromPath(result.histogram.path)
-                                const url = image.toDataURL()
+                              const url = nativeImage.createFromPath(result.histogram.path).toDataURL()
+                              pipelineHistograms.push(url)
+                              if(!loadedPaths.includes(result.histogram.path)){
+                                loadedPaths.push(result.histogram.path)
                                 histograms.push(url)
                               }
                             }
                           }
                         })
                   });
+                  histogramsPerPipeline[item[0]] = pipelineHistograms
                 });
               }
             } catch (error) {
@@ -525,6 +712,7 @@ const ResultsPaneMEDiml = () => {
           if (node.data.internal.results.hasOwnProperty("pipelines")){
             setSelectedPipelines(node.data.internal.results.pipelines)
           }
+          setFinalModels(node.data.internal.results.final_models || {})
           if (node.data.internal.results.hasOwnProperty("experiments")){
             setExpNames(node.data.internal.results.experiments)
           }
@@ -533,6 +721,7 @@ const ResultsPaneMEDiml = () => {
       if (histograms.length > 0) {
         setHistogramImages(histograms)
       }
+      setHistogramsByPipeline(histogramsPerPipeline)
     }
   }, [flowContent])
 
@@ -540,88 +729,46 @@ const ResultsPaneMEDiml = () => {
     <>
       <Col className=" padding-0 results-Panel">
         <Card>
-          <Card.Header className="d-flex justify-content-between align-items-center">
-            <div className="flex justify-content-center">
-              <div className="gap-3 results-header">
-                <div className="flex align-items-center">
-                  <h5>Results</h5>
-                </div>
-              </div>
+          <Card.Header className="flex-wrap justify-content-center">
+            <div className="d-flex justify-content-between align-items-center">
+              <h5>Results</h5>
+              {/*Button to compare*/}
+              <Button
+                label={compareMode? ("Compare Mode: ON") : ("Compare Mode: OFF")}
+                severity={compareMode? ("success") : ("danger")}
+                size="small"
+                rounded
+                raised
+                icon="pi pi-power-off"
+                onClick={() => setCompareMode(!compareMode)}
+              />
+              <Button icon="pi pi-times" rounded text raised severity="danger" aria-label="Cancel" onClick={handleClose}/>
             </div>
-            {/*Button to clean all results*/}
-            {/*<Button 
-                  severity="danger"
-                  rounded 
-                  text
-                  aria-label="Clean"
-                  icon="pi pi-trash"
-                  onClick={() => cleanResults()} 
-                  style={{ width: 'fit-content', margin: 'auto' }}
-              />*/}
-            <Button icon="pi pi-times" rounded text raised severity="danger" aria-label="Cancel" onClick={handleClose}/>
           </Card.Header>
           <Card.Body>
-            {
+            {/*Button to toggle metrics*/}
+            {(compareMode) && (
               <Row className="form-group-box justify-content-center">
-                {/*Button to compare*/}
-                <Button 
-                  label={compareMode? ("Compare Mode: ON") : ("Compare Mode: OFF")}
-                  severity={compareMode? ("success") : ("danger")}
-                  rounded 
-                  raised 
-                  icon="pi pi-power-off"
-                  onClick={() => setCompareMode(!compareMode)} 
-                  style={{ width: 'fit-content', margin: 'auto' }}
-                />
-                
-                {/*Button to toggle metrics*/}
-                {(compareMode) && (<Button 
+                <Button
                   label={showMetrics?  ("Hide Metrics") : ("Show Metrics")}
                   severity={showMetrics? ("info") : ("success")}
-                  rounded 
-                  raised 
+                  rounded
+                  raised
                   icon={showMetrics? ("pi pi-eye-slash") : ("pi pi-eye")}
-                  onClick={() => setShowMetrics(!showMetrics)} 
-                  style={{ width: 'fit-content', margin: 'auto' }}
-                />)}
-
-                {/*Button to generate pipeline code*/}
-                <Button 
-                  label="Generate"
-                  severity="secondary"
-                  rounded 
-                  raised 
-                  icon="pi pi-code"
-                  onClick={(e) => op.current.toggle(e)} 
+                  onClick={() => setShowMetrics(!showMetrics)}
                   style={{ width: 'fit-content', margin: 'auto' }}
                 />
               </Row>
-            }
+            )}
             {compareMode ? (renderAccordionCompared(selectedResults, isResults)) : (renderAccordions(selectedResults, isResults))}
-            {/*Code generation dialog*/}
-            <OverlayPanel ref={op} showCloseIcon>
-                {expNames.length > 0 ? (
-                  <div className="card justify-content-center gap-3">
-                    <SelectButton
-                      value={generatedPipelines} 
-                      onChange={(e) => setGeneratedPipelines(e.value)} 
-                      optionLabel="name" 
-                      options={expNames.map((name, index) => ({ name: `Pipeline ${index + 1}: ${name}`, value: name }))}
-                      multiple
-                    />
-                    <Button 
-                      label="Generate"
-                      severity="secondary"
-                      rounded 
-                      raised 
-                      onClick={() => generateCode()} 
-                      disabled={generatedPipelines.length === 0}
-                      loading={isGenerating}
-                      style={{ width: 'fit-content', margin: 'auto' }}
-                    />
-                  </div>) : (<Message severity="error" text="No pipelines detected"/>
-                )}
-            </OverlayPanel>
+            {/*Zoomable view of the clicked analysis plot*/}
+            <Lightbox
+              open={lightboxSrc !== null}
+              plugins={[Zoom, Fullscreen]}
+              close={() => setLightboxSrc(null)}
+              slides={lightboxSrc ? [{ src: lightboxSrc }] : []}
+              carousel={{ finite: true }}
+            />
           </Card.Body>
         </Card>
       </Col>

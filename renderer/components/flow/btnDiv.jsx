@@ -1,7 +1,6 @@
-import React from "react"
-import { Button } from "react-bootstrap"
+import { ArrowBigLeft, Download, FileDown, FileUp, FolderDown, Import, Play, Save, Square, Trash2 } from "lucide-react"
 import { Tooltip } from 'primereact/tooltip'
-import { ArrowBigLeft, Download, FolderDown, Import, Play, Save, Trash2 } from "lucide-react"
+import { Button } from "react-bootstrap"
 
 
 /**
@@ -62,6 +61,44 @@ const buttonType = {
       </>
     )
   },
+  // Exports the scene as a .json file that can be shared with other MEDiml users
+  exportScene: (onExportScene, disabled = false) => {
+    return (
+      <>
+      <Tooltip key="exportSceneTip" target=".exportSceneBtn"/>
+      <Button
+        className="exportSceneBtn"
+        key="exportScene"
+        data-pr-tooltip="Export the scene as a .json file"
+        data-pr-position="bottom"
+        variant="outline margin-left-10 padding-5"
+        onClick={onExportScene}
+        disabled={disabled}
+        >
+        <FileDown size={25} />
+      </Button>
+      </>
+    )
+  },
+  // Replaces the scene with one imported from a local .json file
+  importScene: (onImportScene, disabled = false) => {
+    return (
+      <>
+      <Tooltip key="importSceneTip" target=".importSceneBtn"/>
+      <Button
+        className="importSceneBtn"
+        key="importScene"
+        data-pr-tooltip="Import a scene from a .json file"
+        data-pr-position="left"
+        variant="outline margin-left-10 padding-5"
+        onClick={onImportScene}
+        disabled={disabled}
+        >
+        <FileUp size={25} />
+      </Button>
+      </>
+    )
+  },
   download: (onDownload, disabled = false) => {
     return (
       <Button key="download" variant="outline margin-left-10 padding-5" onClick={onDownload} disabled={disabled}>
@@ -101,6 +138,25 @@ const buttonType = {
         disabled={disabled}
         >
         <Play size={25} />
+      </Button>
+      </>
+    )
+  },
+  // Replaces the run button while a workflow is running
+  stop: (onStop, disabled = false) => {
+    return (
+      <>
+      <Tooltip key="stopTip" target=".stopBtn"/>
+      <Button
+        className="stopBtn"
+        key="stop"
+        data-pr-tooltip="Stop the running experiment"
+        data-pr-position="bottom"
+        variant="outline margin-left-10 padding-5"
+        onClick={onStop}
+        disabled={disabled}
+        >
+        <Square size={25} color="red" />
       </Button>
       </>
     )

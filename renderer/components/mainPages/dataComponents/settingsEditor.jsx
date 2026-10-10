@@ -13,7 +13,9 @@ import { Col, Form, Row } from "react-bootstrap";
 import { toast } from 'react-toastify';
 import { requestBackend } from '../../../utilities/requests';
 import DocLink from '../../extractionMEDiml/docLink';
+import Caption from '../../primitives/Caption';
 import { WorkspaceContext } from '../../workspace/workspaceContext';
+import { sectionCardClass } from '../../primitives/SectionCard';
 
 function TextureParams({ ModSettings, activeIndex, setActiveIndex, discretisationAlgos, indexAlgo, indexVal }) {
     return (
@@ -54,7 +56,7 @@ function TextureParams({ ModSettings, activeIndex, setActiveIndex, discretisatio
 const renderFiltering = (activeIndex, setActiveIndex, params) => {
     return (
         <>
-            <Row className="form-group-box">
+            <Row className={sectionCardClass}>
                 <div className="text-center text-muted" style={{ fontSize: "0.9rem", }}>
                     <label>
                         This tab enables you to configure the filtering parameters for the image data for the selected filter.
@@ -62,7 +64,7 @@ const renderFiltering = (activeIndex, setActiveIndex, params) => {
                     </label>
                 </div>
             </Row>
-            <Row className="form-group-box">
+            <Row className={sectionCardClass}>
                 <div className="text-center">
                     <span className="p-inputgroup-addon">
                         <label><b>Mean</b></label>
@@ -169,7 +171,7 @@ const renderFiltering = (activeIndex, setActiveIndex, params) => {
                     </Form.Group>
                 </Form.Group>
             </Row>
-            <Row className="form-group-box">
+            <Row className={sectionCardClass}>
                 <div className="text-center">
                     <span className="p-inputgroup-addon">
                         <label><b>Log</b></label>
@@ -276,7 +278,7 @@ const renderFiltering = (activeIndex, setActiveIndex, params) => {
                     </Form.Group>
                 </Form.Group>
             </Row>
-            <Row className="form-group-box">
+            <Row className={sectionCardClass}>
                 <div className="text-center">
                     <span className="p-inputgroup-addon">
                         <label><b>Laws</b></label>
@@ -477,7 +479,7 @@ const renderFiltering = (activeIndex, setActiveIndex, params) => {
                 </Form.Group>
             </Row>
 
-            <Row className="form-group-box">
+            <Row className={sectionCardClass}>
                 <div className="text-center">
                     <span className="p-inputgroup-addon">
                         <label><b>Gabor</b></label>
@@ -631,7 +633,7 @@ const renderFiltering = (activeIndex, setActiveIndex, params) => {
                 </Form.Group>
             </Row>
 
-            <Row className="form-group-box">
+            <Row className={sectionCardClass}>
                 <div className="text-center">
                     <span className="p-inputgroup-addon">
                         <label><b>Wavelet</b></label>
@@ -887,7 +889,7 @@ const renderParamsPanel = (activeIndex, setActiveIndex, setShowEdit, ModSettings
                     <i className="pi pi-box"></i>
                 </span>
             </div>
-            <Row className="form-group-box">
+            <Row className={sectionCardClass}>
                 {/* BOX STRING*/}
                 <Form.Group as={Row} controlId="boxString">
                     <Tooltip target=".boxString" />
@@ -937,14 +939,14 @@ const renderParamsPanel = (activeIndex, setActiveIndex, setShowEdit, ModSettings
 
                 {/* INTERPOLATION */}
             </Row>
-            <Row className="form-group-box">
+            <Row className={sectionCardClass}>
                 <div className="text-center">
                     <span className="p-inputgroup-addon">
                         <i className="pi pi-window-maximize"></i>
                     </span>
                     <label><b>Interpolation</b></label>
                 </div>
-                <Col className="form-group-box">
+                <Col className={sectionCardClass}>
                     <Form.Group as={Row}>
                         <Tooltip target=".scaleNonText" />
                         <Form.Label
@@ -1018,7 +1020,7 @@ const renderParamsPanel = (activeIndex, setActiveIndex, setShowEdit, ModSettings
                 </Col>
 
                 {/* SCALE TEXTURE*/}
-                <Col className="form-group-box">
+                <Col className={sectionCardClass}>
                     <Form.Group as={Row}>
                         <Tooltip target=".scaleText" />
                         <Form.Label
@@ -1090,7 +1092,7 @@ const renderParamsPanel = (activeIndex, setActiveIndex, setShowEdit, ModSettings
                     </Form.Group>
                 </Col>
             </Row>
-            <Row className="form-group-box">
+            <Row className={sectionCardClass}>
                 <Col>
                     <Form.Group as={Row}>
                         <Form.Label className="volInterpMeth" column>Volume interpolation method</Form.Label>
@@ -1191,7 +1193,7 @@ const renderParamsPanel = (activeIndex, setActiveIndex, setShowEdit, ModSettings
                 </span>
                 <label><b>Re-Segmentation</b></label>
             </div>
-            <Row className="form-group-box">
+            <Row className={sectionCardClass}>
                 <Form.Group as={Row}>
                     <Tooltip target=".resegRange" />
                     <Form.Label
@@ -1292,7 +1294,7 @@ const renderParamsPanel = (activeIndex, setActiveIndex, setShowEdit, ModSettings
                 <label><b>Discretisation</b></label>
             </div>
             {/* IH DISCRETIZATION */}
-            <Row className="form-group-box">
+            <Row className={sectionCardClass}>
                 <Form.Group as={Row}>
                     <Tooltip target=".discretisationIH" />
                     <Form.Label
@@ -1334,7 +1336,7 @@ const renderParamsPanel = (activeIndex, setActiveIndex, setShowEdit, ModSettings
             </Row>
 
             {/* IVH DISCRETIZATION */}
-            <Row className="form-group-box">
+            <Row className={sectionCardClass}>
                 <Form.Group as={Row}>
                     <Tooltip target=".discretisationIVH" />
                     <Form.Label
@@ -1385,7 +1387,7 @@ const renderParamsPanel = (activeIndex, setActiveIndex, setShowEdit, ModSettings
             </Row>
 
             {/* TEXTURE DISCRETIZATION */}
-            <Row className="form-group-box">
+            <Row className={sectionCardClass}>
                 <Form.Group as={Row}>
                     <Tooltip target=".discretisation" />
                     <Form.Label
@@ -1431,7 +1433,7 @@ const renderParamsPanel = (activeIndex, setActiveIndex, setShowEdit, ModSettings
             </div>
 
             {/* FILTERING DISCRETIZATION */}
-            <Row className="form-group-box">
+            <Row className={sectionCardClass}>
                 <Form.Group as={Row} className="align-items-center mb-4">
                     <Tooltip target=".filtering" />
                     <Form.Label
@@ -1501,7 +1503,7 @@ const renderParamsPanel = (activeIndex, setActiveIndex, setShowEdit, ModSettings
                     <i className="pi pi-list"></i>
                 </span>
             </div>
-            <Row className="form-group-box">
+            <Row className={sectionCardClass}>
                 <Form.Group as={Row}>
                     <Tooltip target=".ftext" />
                     <Form.Label
@@ -1596,7 +1598,7 @@ const renderParamsPanel = (activeIndex, setActiveIndex, setShowEdit, ModSettings
             </Row>
 
             {('extract' in ModSettings && 'Dose' in ModSettings.extract && ModSettings.extract.Dose) && (
-                <Row className="form-group-box">
+                <Row className={sectionCardClass}>
                     <div style={{ marginTop: '10px', marginBottom: '10px' }}>
                         <div className="text-center mb-4">
                             <span className="p-inputgroup-addon">
@@ -1648,9 +1650,9 @@ const renderParamsPanel = (activeIndex, setActiveIndex, setShowEdit, ModSettings
                                         incrementButtonClassName="p-button-info"
                                         decrementButtonClassName="p-button-info"
                                     />)}
-                                <div style={{ fontSize: "13px", fontStyle: "italic", margin: "6px 0 0 0" }}>
+                                <Caption below>
                                     You may enter an integer (number of voxels) or a float between 0 and 1 (percentage) to extend the ROI bounding box.
-                                </div>
+                                </Caption>
                             </Col>
                         </Form.Group>
                         <Form.Group as={Row} controlId="doseVxThresholds">
@@ -1775,7 +1777,7 @@ const SettingsEditor = ({ showEdit, setShowEdit, settings, pathSettings, onHideB
             maximizable
         >
             {/* GENERAL PARAMS */}
-            <Row className="form-group-box">
+            <Row className={sectionCardClass}>
                 <div className="text-center">
                     <span className="p-inputgroup-addon">
                         <i className="pi pi-cog"></i>

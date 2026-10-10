@@ -3,6 +3,8 @@ import { useState } from "react"
 import { Form, Row } from "react-bootstrap"
 import DocLink from "../../extractionMEDiml/docLink"
 import Node, { updateHasWarning } from "../../flow/node"
+import Caption from '../../primitives/Caption'
+import { sectionCardClass } from '../../primitives/SectionCard'
 
 /**
  * @param {string} id id of the node
@@ -34,7 +36,7 @@ const Design = ({ id, data, type }) => {
         nodeSpecific={
           <>
             <Row 
-              className="form-group-box" 
+              className={sectionCardClass} 
               style={{ maxHeight: "400px", overflowY: "auto", overflowX: "hidden", paddingRight: "8px" }}
             >
               <DocLink
@@ -49,7 +51,7 @@ const Design = ({ id, data, type }) => {
                   className="expName">
                       Experiment Name
               </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Unique identifier for the analysis experiment.</p>
+              <Caption>Unique identifier for the analysis experiment.</Caption>
                 <InputText
                   style={{width: "300px", display: "block", margin: "0 auto"}}
                   value={data.internal.settings.expName || data.setupParam.possibleSettings.defaultSettings.expName}

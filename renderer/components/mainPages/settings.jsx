@@ -11,6 +11,7 @@ import { InputText } from "primereact/inputtext"
 import { TabPanel, TabView } from "primereact/tabview"
 import { useCallback, useContext, useEffect, useRef, useState } from "react"
 import { Col } from "react-bootstrap"
+import { toast } from "react-toastify"
 import { requestBackend } from "../../utilities/requests"
 import FirstSetupModal from "../generalPurpose/installation/firstSetupModal"
 import { WorkspaceContext } from "../workspace/workspaceContext"
@@ -39,6 +40,10 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
   const [pythonPackages, setPythonPackages] = useState(null)
   const [showPythonPackages, setShowPythonPackages] = useState(false)
   const [firstSetupModalVisible, setFirstSetupModalVisible] = useState(false)
+  const [missingRequirements, setMissingRequirements] = useState(null) // null until checked
+  const [requirementsCheckError, setRequirementsCheckError] = useState(null)
+  const [isCheckingRequirements, setIsCheckingRequirements] = useState(false)
+  const [isInstallingRequirements, setIsInstallingRequirements] = useState(false)
 
   const isMountedRef = useRef(true)
   const saveSettingsTimeoutRef = useRef(null)
@@ -135,6 +140,47 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
     },
     isActive ? 5000 : null
   )
+
+  const checkMissingRequirements = useCallback((pythonPath) => {
+    if (!pythonPath) return
+    setIsCheckingRequirements(true)
+    ipcRenderer
+      .invoke("getMissingPythonRequirements", pythonPath)
+      .then((missing) => {
+        if (!isMountedRef.current) return
+        setMissingRequirements(missing)
+        setRequirementsCheckError(null)
+      })
+      .catch((error) => {
+        if (!isMountedRef.current) return
+        setMissingRequirements(null)
+        setRequirementsCheckError(String(error?.message || error))
+      })
+      .finally(() => isMountedRef.current && setIsCheckingRequirements(false))
+  }, [])
+
+  const installMissingRequirements = () => {
+    setIsInstallingRequirements(true)
+    ipcRenderer
+      .invoke("installMissingPythonRequirements", bundledPythonPath, missingRequirements.map((r) => r.requirement))
+      .then(({ success, code }) => {
+        if (success) {
+          toast.success("Missing Python packages installed")
+        } else {
+          toast.error(`Package installation failed (pip exit code ${code}). See the notifications for pip's output.`)
+        }
+      })
+      .finally(() => {
+        if (!isMountedRef.current) return
+        setIsInstallingRequirements(false)
+        checkMissingRequirements(bundledPythonPath)
+        if (showPythonPackages) loadPythonPackages(bundledPythonPath)
+      })
+  }
+
+  useEffect(() => {
+    checkMissingRequirements(bundledPythonPath)
+  }, [bundledPythonPath, checkMissingRequirements])
 
   useEffect(() => {
     if (showPythonPackages && bundledPythonPath) {
@@ -374,6 +420,53 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
                   </Col>
                   {bundledPythonPath && typeof bundledPythonPath === "string" && <h6 style={{ marginTop: "0.5rem" }}>at {bundledPythonPath}</h6>}
                 </Col>
+                {bundledPythonPath && (
+                  <Col xs={12} md={12} className="d-flex flex-wrap align-items-center gap-3 mt-3">
+                    <h5 className="mb-0">Required packages :</h5>
+                    {isCheckingRequirements || isInstallingRequirements ? (
+                      <h5 className="mb-0 text-muted">{isInstallingRequirements ? "Installing..." : "Checking..."}</h5>
+                    ) : requirementsCheckError ? (
+                      <>
+                        <CircleX size="25" className="text-danger" />
+                        <h5 className="mb-0 text-danger">Could not check the requirements</h5>
+                      </>
+                    ) : missingRequirements?.length === 0 ? (
+                      <>
+                        <CircleCheckBig size="25" className="text-success" />
+                        <h5 className="mb-0">All requirements are met</h5>
+                      </>
+                    ) : missingRequirements ? (
+                      <>
+                        <CircleX size="25" className="text-danger" />
+                        <h5 className="mb-0 text-danger">
+                          {missingRequirements.length} missing or outdated package{missingRequirements.length > 1 ? "s" : ""}
+                        </h5>
+                      </>
+                    ) : null}
+                    <Button
+                      label="Check again"
+                      className="p-button-secondary p-button-outlined"
+                      onClick={() => checkMissingRequirements(bundledPythonPath)}
+                      disabled={isCheckingRequirements || isInstallingRequirements}
+                    />
+                    {missingRequirements?.length > 0 && (
+                      <Button
+                        label="Install missing packages"
+                        icon="pi pi-download"
+                        onClick={installMissingRequirements}
+                        disabled={isCheckingRequirements || isInstallingRequirements}
+                        loading={isInstallingRequirements}
+                      />
+                    )}
+                  </Col>
+                )}
+                {requirementsCheckError && <small className="d-block mt-2 text-danger">{requirementsCheckError}</small>}
+                {missingRequirements?.length > 0 && (
+                  <DataTable value={missingRequirements} size="small" className="mt-3">
+                    <Column field="requirement" header="Required" />
+                    <Column header="Installed" body={(row) => row.installed || "Not installed"} />
+                  </DataTable>
+                )}
                 {showPythonPackages && (
                   <DataTable value={pythonPackages} size="small" scrollable scrollHeight="25rem" style={{ marginTop: "1rem" }}>
                     <Column field="name" header="Name" />

@@ -1,11 +1,13 @@
 import { Dropdown } from "primereact/dropdown"
 import { MultiSelect } from 'primereact/multiselect'
-import React, { useContext, useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { Alert, Col, Form, Row } from "react-bootstrap"
 import { toast } from 'react-toastify'
 import Node, { updateHasWarning } from "../../flow/node"
-import { DataContext } from "../../workspace/dataContext"
+import { useMEDDataObjectsByType, useMEDDataStore } from "../../workspace/useMEDData"
 import { set } from "lodash"
+import Caption from '../../primitives/Caption'
+import { sectionCardClass } from '../../primitives/SectionCard'
 
 /**
  * @param {string} id id of the node
@@ -23,7 +25,10 @@ const Data = ({ id, data, type }) => {
   const [selectedFolder, setSelectedFolder] = useState("") // Selected folder
   const [listWSFolders, setListWSFolders] = useState([]) // List of folders in the workspace
   const [listCSVFiles, setListCSVFiles] = useState([]) // List of csv files in the workspace
-  const { globalData } = useContext(DataContext) // We get the global data from the context
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
+  // Re-run updateWSfolder only when the set of directories/csv files actually changes, instead of
+  // on every unrelated workspace change.
+  const relevantIds = useMEDDataObjectsByType(["directory", "csv"])
   const sectionStyle = {
     marginBottom: "16px",
     paddingBottom: "12px",
@@ -48,9 +53,10 @@ const Data = ({ id, data, type }) => {
   
   useEffect(() => {
     updateWSfolder()
-  }, [globalData])
+  }, [relevantIds])
 
   const updateWSfolder = () => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let wsFolders = []
@@ -70,6 +76,7 @@ const Data = ({ id, data, type }) => {
 
   const handleSaveFolderChange = (directoryPath) => {
     setSelectedFolder(directoryPath)
+    const globalData = medDataStore.snapshot()
     let csvFiles = []
     let keys = Object.keys(globalData)
     let folderID = keys.filter(key => globalData[key].path === directoryPath)
@@ -102,7 +109,7 @@ const Data = ({ id, data, type }) => {
         setupParam={data.setupParam}
         nodeSpecific={
           <>
-            <Row className="form-group-box" style={{ textAlign: "center", alignItems: "center", justifyContent: "center" }}>
+            <Row className={sectionCardClass} style={{ alignItems: "center", justifyContent: "center" }}>
             <Col>
             {/* nameType */}
             {/*<Form.Group controlId="nameType">
@@ -128,7 +135,7 @@ const Data = ({ id, data, type }) => {
             {/* path features */}
             <Form.Group controlId="FeaturePath" style={sectionStyle}>
               <Form.Label className="FeaturePath">Features Folder Name</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Select the folder containing feature files for training.</p>
+              <Caption>Select the folder containing feature files for training.</Caption>
               <Col style={{ width: "300px", margin: "0 auto", display: "block", textAlign: "center" }}>
                 <Dropdown
                   style={{ maxWidth: "100%", height: "auto", width: "auto" }}
@@ -152,7 +159,7 @@ const Data = ({ id, data, type }) => {
             {(listCSVFiles.length > 0) && (
             <Form.Group controlId="selectFeaturesFiles" style={lastSectionStyle}>
               <Form.Label className="selectFiles" style={{ marginTop: "10px" }}>Select Features Files</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Choose which feature files to use for model training.</p>
+              <Caption>Choose which feature files to use for model training.</Caption>
               <MultiSelect
                 style={{ maxWidth: "100%", height: "auto", width: "auto" }}
                 value={featuresFiles} 

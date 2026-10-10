@@ -8,7 +8,7 @@ import { Col, Row } from "react-bootstrap"
 import { toast } from "react-toastify"
 import { requestBackend } from "../../utilities/requests"
 import { ServerConnectionContext } from "../serverConnection/connectionContext"
-import { DataContext } from "../workspace/dataContext"
+import { useMEDDataStore } from "../workspace/useMEDData"
 
 import "ace-builds/src-noconflict/ext-language_tools"
 import "ace-builds/src-noconflict/mode-javascript"
@@ -120,7 +120,7 @@ const CodeEditor = ({id, path, updateSavedCode}) => {
   const [stackTrace, setStackTrace] = useState("")
   const [loading, setLoading] = useState(true)
   const [loadingSave, setLoadingSave] = useState(false)
-  const { globalData } = useContext(DataContext)
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
   const { port } = useContext(ServerConnectionContext)
   
   // handle content change
@@ -172,13 +172,13 @@ const CodeEditor = ({id, path, updateSavedCode}) => {
         else {
           setSaved(true)
           updateSavedCode(true, id)
-          toast.success("Saved " + globalData[id].name + " file successfully to the database")
+          toast.success("Saved " + medDataStore.get(id)?.name + " file successfully to the database")
         }
       },
       (error) => {
         setLoadingSave(false)
         console.error("Error from backend:", error)
-        toast.error("Error saving file to the database: " + globalData[id].name)
+        toast.error("Error saving file to the database: " + medDataStore.get(id)?.name)
       }
     )
     return
@@ -193,7 +193,7 @@ const CodeEditor = ({id, path, updateSavedCode}) => {
     // Simulate loading from MongoDB or local path
     if (!path && id){
       // Retrieve path
-      path = globalData[id].path
+      path = medDataStore.get(id)?.path
     }
     if (!path) {
       setContent("Error: missing path or file not found locally")
