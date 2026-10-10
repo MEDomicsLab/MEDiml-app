@@ -31,6 +31,7 @@ import FeatureReduction from "./nodes/FeatureReduction.jsx"
 import Normalization from "./nodes/Normalization.jsx"
 import RadiomicsLearner from "./nodes/RadiomicsLearner.jsx"
 import Split from "./nodes/Split.jsx"
+import BoxNode from "./nodes/boxNode.jsx"
 
 // Import node parameters
 import nodesParams from "../../public/setupVariables/allNodesParams.jsx"
@@ -52,6 +53,95 @@ const SCENE_FILE_VERSION = 1
 
 // Key of a node in nodesParams.learningMEDiml, as used by updateScene to restore its setupParam
 const getSetupParamKey = (node) => node.name?.toLowerCase().replaceAll(" ", "_").replaceAll("-", "_")
+
+// Guiding boxes added to every scene: each node must be placed inside the box of its section
+// (see section in learningMEDimlNodesParams). The Analyze node is the analysis step, it has no box.
+const GUIDING_BOXES = [
+  { id: "box-initialization", name: "Initialization", section: "initialization", position: { x: 0, y: 0 }, size: { width: 800, height: 600 } },
+  { id: "box-training", name: "Training", section: "machine learning", position: { x: 850, y: 0 }, size: { width: 1200, height: 600 } }
+]
+const ANALYZE_NODE_POSITION = { x: 2100, y: 250 } // default position of the Analyze node, right of the Training box
+const BOX_SIDEBAR_WIDTH = 60 // width of the box's label sidebar, nodes cannot be placed over it (see nodes/boxNode.jsx)
+const BOX_COLORS = {
+  valid: { borderColor: "rgba(173, 230, 150, 0.8)", selectedBorderColor: "rgb(255, 187, 0)" },
+  invalid: { borderColor: "rgba(255, 0, 0, 0.8)", selectedBorderColor: "rgb(255, 0, 0)" }
+}
+
+const isBoxNode = (node) => node.type === "boxNode"
+
+const createBoxNode = ({ id, name, position, size }) => ({
+  id,
+  type: "boxNode",
+  name,
+  position: { ...position },
+  draggable: false, // the nodes inside a box do not follow it
+  deletable: false,
+  selectable: true, // selecting the box shows its resizer
+  zIndex: -1001, // the box is displayed under the nodes, even when selected (reactflow adds 1000 to the zIndex of selected nodes)
+  data: {
+    id,
+    size,
+    internal: { name, type: "box", subflowId: "MAIN", hasWarning: { state: false }, ...BOX_COLORS.valid }
+  }
+})
+
+const getNodeRect = (node) => ({
+  x: node.position.x,
+  y: node.position.y,
+  width: node.width ?? node.data.size?.width ?? 0,
+  height: node.height ?? node.data.size?.height ?? 0
+})
+
+const rectsIntersect = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+
+const isInsideBox = (rect, box) =>
+  rect.x >= box.x + BOX_SIDEBAR_WIDTH && rect.x + rect.width <= box.x + box.width && rect.y >= box.y && rect.y + rect.height <= box.y + box.height
+
+/**
+ * @param {Array} nodes nodes of the scene
+ * @returns {{invalidBoxIds: Set<String>, misplacedNodes: Array<{node: Object, box: Object}>}}
+ * the boxes containing a node of another section, and the nodes that are not fully inside the box of their section
+ */
+const getPlacementErrors = (nodes) => {
+  const boxes = nodes.filter(isBoxNode)
+  const invalidBoxIds = new Set()
+  const misplacedNodes = []
+  nodes.forEach((node) => {
+    if (isBoxNode(node) || node.hidden) return
+    const rect = getNodeRect(node)
+    const sectionBoxId = GUIDING_BOXES.find((box) => box.section === node.data.setupParam?.section?.toLowerCase())?.id
+    const sectionBox = boxes.find((box) => box.id === sectionBoxId)
+    boxes.forEach((box) => {
+      if (box !== sectionBox && rectsIntersect(rect, getNodeRect(box))) invalidBoxIds.add(box.id)
+    })
+    if (sectionBox && !isInsideBox(rect, getNodeRect(sectionBox))) misplacedNodes.push({ node, box: sectionBox })
+  })
+  return { invalidBoxIds, misplacedNodes }
+}
+
+/**
+ * @param {Array} nodes nodes of the scene
+ * @returns {Array} the nodes with the boxes colored red if they contain a wrong node, and the misplaced nodes
+ * flagged with the "misplaced" class. The same array is returned if nothing changed.
+ */
+const applyPlacementErrors = (nodes) => {
+  const { invalidBoxIds, misplacedNodes } = getPlacementErrors(nodes)
+  const misplacedIds = new Set(misplacedNodes.map(({ node }) => node.id))
+  let hasChanged = false
+  const newNodes = nodes.map((node) => {
+    if (isBoxNode(node)) {
+      const colors = invalidBoxIds.has(node.id) ? BOX_COLORS.invalid : BOX_COLORS.valid
+      if (node.data.internal.borderColor === colors.borderColor) return node
+      hasChanged = true
+      return { ...node, data: { ...node.data, internal: { ...node.data.internal, ...colors } } }
+    }
+    const className = misplacedIds.has(node.id) ? "misplaced" : ""
+    if ((node.className || "") === className) return node
+    hasChanged = true
+    return { ...node, className }
+  })
+  return hasChanged ? newNodes : nodes
+}
 
 /**
  * @returns {Promise<{name: String, content: Object}|null>} the selected .json file and its parsed content, null if cancelled
@@ -91,7 +181,7 @@ const parseSceneFile = (json) => {
   if (!scene || !Array.isArray(scene.nodes) || !Array.isArray(scene.edges)) {
     throw new Error("This file is not a MEDiml learning scene: nodes or edges are missing")
   }
-  const unknownNodes = scene.nodes.filter((node) => !node.data?.internal || !staticNodesParams.learningMEDiml[getSetupParamKey(node)])
+  const unknownNodes = scene.nodes.filter((node) => !isBoxNode(node) && (!node.data?.internal || !staticNodesParams.learningMEDiml[getSetupParamKey(node)]))
   if (unknownNodes.length > 0) {
     const names = [...new Set(unknownNodes.map((node) => node.name || node.type || node.id))].join(", ")
     throw new Error(`This scene contains nodes the learning module does not support (${names}). Extraction scenes can only be imported in the extraction module.`)
@@ -193,7 +283,8 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
       Normalization: Normalization,
       FeatureReduction: FeatureReduction,
       RadiomicsLearner: RadiomicsLearner,
-      Analyze: Analyze
+      Analyze: Analyze,
+      boxNode: BoxNode
     }),
     []
   )
@@ -227,6 +318,28 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
     setTreeData(createTreeFromNodes())
     checkDuplicateExperiments(nodes)
   }, [nodes, edges])
+
+  // Adds the guiding boxes and the Analyze node to the scene when they are missing (new, cleared or older scenes)
+  useEffect(() => {
+    const hasDefaults = (nds) => GUIDING_BOXES.every((box) => nds.some((node) => node.id === box.id)) && nds.some((node) => node.type === "Analyze")
+    if (hasDefaults(nodes)) return
+    setNodes((nds) => {
+      if (hasDefaults(nds)) return nds
+      const defaultNodes = GUIDING_BOXES.filter((box) => !nds.some((node) => node.id === box.id)).map(createBoxNode)
+      if (!nds.some((node) => node.type === "Analyze")) defaultNodes.push(createAnalyzeNode())
+      // the boxes are placed first so they are rendered under the nodes
+      return [...defaultNodes, ...nds]
+    })
+  }, [nodes])
+
+  // Checks the placement of the nodes in the guiding boxes upon every scene update (node added, dragged, deleted, scene loaded...)
+  useEffect(() => {
+    setNodes(applyPlacementErrors)
+  }, [nodes])
+
+  // Nodes outside the box of their section, or boxes containing a node of another section, prevent the experiment from running
+  const placementErrors = useMemo(() => getPlacementErrors(nodes), [nodes])
+  const hasPlacementErrors = placementErrors.invalidBoxIds.size > 0 || placementErrors.misplacedNodes.length > 0
 
   // Hook executed upon modification of groupNodeId to show the current workflow
   useEffect(() => {
@@ -382,6 +495,33 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
     return newNode
   }
 
+  /**
+   * @returns {Object} a new Analyze node, placed right of the Training box
+   *
+   * @description
+   * The Analyze node is the analysis step of every experiment, so it is always on the scene
+   */
+  const createAnalyzeNode = () => {
+    const { title, img } = staticNodesParams.learningMEDiml.analyze
+    const analyzeNode = {
+      id: `node_${uuid.v4()}`,
+      type: "Analyze",
+      name: title,
+      position: { ...ANALYZE_NODE_POSITION },
+      data: {
+        internal: {
+          name: title,
+          img: img,
+          type: title.toLowerCase(),
+          results: { checked: false, contextChecked: false },
+          hasRun: false
+        },
+        tooltipBy: "node"
+      }
+    }
+    return addSpecificToNode(analyzeNode)
+  }
+
   // Check if there are duplicate model nodes and show a warning if there are
   const checkDuplicateExperiments = (nodes) => {
     const expNodes = nodes.filter((node) => node.type === "Design")
@@ -461,6 +601,10 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
   const deleteNode = useCallback(
     (id) => {
       console.log("Deleting node ", id)
+      if (nodes.find((node) => node.id === id)?.type === "Analyze") {
+        toast.warn("The Analyze node cannot be deleted, it is the analysis step of the experiment")
+        return
+      }
 
       setNodes((nds) =>
         nds.reduce((filteredNodes, n) => {
@@ -507,7 +651,8 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
       console.log("The current React Flow instance is : ")
       console.log(flow)
 
-      flow.nodes.forEach((node) => {
+      // The guiding boxes are only visual, they are not sent to the backend
+      flow.nodes.filter((node) => !isBoxNode(node)).forEach((node) => {
         const nodeID = node.id
 
         // If the node is a features node
@@ -808,11 +953,11 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
         selectable: true
       }))
     )
-    // Unfreeze all nodes
+    // Unfreeze all nodes, the guiding boxes stay in place
     setNodes((prevNodes) =>
       prevNodes.map((node) => ({
         ...node,
-        draggable: true,
+        draggable: !isBoxNode(node),
         selectable: true,
         connectable: true
       }))
@@ -824,6 +969,19 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
    * Runs all the pipelines in the workflow
    */
   const onRun = useCallback(() => {
+    // Check if all nodes are in place
+    const { invalidBoxIds, misplacedNodes } = getPlacementErrors(nodes)
+    if (misplacedNodes.length > 0) {
+      const { node, box } = misplacedNodes[0]
+      toast.error(`Node "${node.data.internal.name}" is misplaced. Please place it inside the "${box.name}" box.`)
+      return
+    }
+    if (invalidBoxIds.size > 0) {
+      const boxNames = nodes.filter((node) => invalidBoxIds.has(node.id)).map((node) => `"${node.name}"`).join(", ")
+      toast.error(`The ${boxNames} box contains a node that does not belong to it. Please move it to its designated box.`)
+      return
+    }
+
     let experimentsTemp = []
     let resultsFolders = []
     let nSplitsTemp = []
@@ -1237,8 +1395,8 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
       node.data.enableView = false
       // The results point to files on this computer, they are not shared
       delete node.data.internal?.results
-      // Interaction flags set while the experiment runs (see onRun)
-      delete node.draggable
+      // Interaction flags set while the experiment runs (see onRun), the guiding boxes are never draggable
+      if (!isBoxNode(node)) delete node.draggable
       delete node.selectable
       delete node.connectable
       delete node.selected
@@ -1365,7 +1523,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
               <>
                 <BtnDiv
                   buttonsList={[
-                    isRunning ? { type: "stop", onClick: onStop } : { type: "run", onClick: onRun, disabled: !canRun },
+                    isRunning ? { type: "stop", onClick: onStop } : { type: "run", onClick: onRun, disabled: !canRun || hasPlacementErrors },
                     { type: "clear", onClick: onClear },
                     { type: "save", onClick: onSave },
                     { type: "exportScene", onClick: onExportScene },

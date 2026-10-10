@@ -200,6 +200,11 @@
   cursor: grab;
 }
 
+/* Learning scene: node placed outside the box of its section */
+.react-flow__node.misplaced .node .p-card {
+  outline: 0.2rem solid var(--med-status-error);
+}
+
 .cursor-grab {
   cursor: grab;
 }
