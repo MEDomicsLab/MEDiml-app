@@ -364,21 +364,16 @@
   margin-left: 5px;
 }
 
-.flow-btn-panel-left-vertical {
+.flow-btn-panel-error {
   position: absolute;
-  left: 1.75rem;
-  /* TODO(phase-4): was
-       bottom: calc(1rem + calc(var(--num-controls-btn)+2) * 1.5rem);
-     `+` needs surrounding whitespace inside calc(), so the whole expression was
-     invalid and `bottom` was dropped -- this element has always resolved to
-     `bottom: auto`. Restoring it would move the control, so it is removed here
-     and left for the flow canvas rework. */
+  left: calc(15px + 13px);
+  bottom: calc(15px + 5 * 27px + 0.5rem);
   cursor: pointer;
   z-index: 10;
   translate: -50% 0;
 }
 
-.flow-btn-panel-left-vertical .p-button {
+.flow-btn-panel-error .p-button {
   background-color: #ff000073;
   width: 2rem;
   height: 2rem !important;

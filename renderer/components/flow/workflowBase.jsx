@@ -649,7 +649,7 @@ const WorkflowBase = ({ isGoodConnection, groupNodeHandlingDefault, onDeleteNode
           </Row>
         </div>
 
-        <div className="flow-btn-panel-left-vertical">
+        <div className="flow-btn-panel-error">
           {hasBeenAnError && (
             <Button
               icon="pi pi-exclamation-circle"
