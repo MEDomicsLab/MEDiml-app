@@ -401,7 +401,10 @@ class MEDimlExtraction:
                 ray.shutdown()
 
                 # Get the path to the file created by MEDiml
-                file = dm.path_to_objects[0]
+                paths_to_objects = dm.path_to_objects
+                if not paths_to_objects:
+                    return {"error": "No MEDiml object could be created from the DICOM folder."}
+                file = paths_to_objects[0] if len(paths_to_objects[0]) > 1 else "".join(paths_to_objects)
 
             # Load and return the MEDscan object
             try:
