@@ -722,12 +722,8 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
                   }
 
                   if (executedNodes.includes(node.id)) {
-                    // Enable the view button of the node
-                    node.data.internal.enableView = true
-                    updateNode({
-                      id: node.id,
-                      updatedData: node.data.internal
-                    })
+                    // Enable the view button of the node (new objects so react flow re-renders it)
+                    return { ...node, data: { ...node.data, internal: { ...node.data.internal, enableView: true } } }
                   }
 
                   return node
@@ -838,14 +834,8 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
                 }
               }
 
-              // Enable the view button of the node
-              node.data.internal.enableView = true
-              updateNode({
-                id: node.id,
-                updatedData: node.data.internal
-              })
-
-              return node
+              // Enable the view button of the node (new objects so react flow re-renders it)
+              return { ...node, data: { ...node.data, internal: { ...node.data.internal, enableView: true } } }
             })
           )
         }
