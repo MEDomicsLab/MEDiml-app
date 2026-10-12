@@ -35,13 +35,13 @@ const learningMEDimlDefaultSettings = {
 
   // variables 
   radiomics_learner : {
-    model: "xgboost", // PyCaret classification model ID, or "best" to auto-select with compare_models()
+    model: "best", // PyCaret classification model ID, or "best" to auto-select with compare_models()
     bestInclude: [], // "best" only: models to compare (all models when empty)
     bestExclude: [], // "best" only: models to skip (ignored when bestInclude is set)
     nFeaturesToSelect: 0.3,
     optimizeThreshold: true,
     useGPU: true, // uses the GPU when available, as MEDiml's RadiomicsLearner
-    nameSave: "xgboost_thresh_opt",
+    nameSave: "best_w_thresh_opt",
     optimizationMetric: "MCC",
     seed: 54288
   },

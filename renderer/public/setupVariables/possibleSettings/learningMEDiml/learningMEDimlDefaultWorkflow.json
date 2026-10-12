@@ -349,13 +349,13 @@
           },
           "hasRun": false,
           "settings": {
-            "model": "xgboost",
+            "model": "best",
             "bestInclude": [],
             "bestExclude": [],
             "nFeaturesToSelect": 0.3,
             "optimizeThreshold": true,
             "useGPU": true,
-            "nameSave": "xgboost_5perc",
+            "nameSave": "best_w_thresh_opt",
             "optimizationMetric": "MCC",
             "seed": 54288
           },
@@ -381,13 +381,13 @@
           "title": "Radiomics learner",
           "possibleSettings": {
             "defaultSettings": {
-              "model": "xgboost",
+              "model": "best",
               "bestInclude": [],
               "bestExclude": [],
               "nFeaturesToSelect": 0.3,
               "optimizeThreshold": true,
               "useGPU": true,
-              "nameSave": "xgboost_5perc",
+              "nameSave": "best_w_thresh_opt",
               "optimizationMetric": "MCC",
               "seed": 54288
             }
