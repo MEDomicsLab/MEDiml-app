@@ -14,6 +14,7 @@ import { Col } from "react-bootstrap"
 import { toast } from "react-toastify"
 import { requestBackend } from "../../utilities/requests"
 import FirstSetupModal from "../generalPurpose/installation/firstSetupModal"
+import { resetConnection } from "../workspace/data/MongoConnection"
 import { WorkspaceContext } from "../workspace/workspaceContext"
 import ModulePage from "./moduleBasics/modulePage"
 
@@ -33,6 +34,7 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
   const [settings, setSettings] = useState(null)
   const [serverIsRunning, setServerIsRunning] = useState(false)
   const [mongoServerIsRunning, setMongoServerIsRunning] = useState(false)
+  const [isRestartingMongo, setIsRestartingMongo] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const [condaPath, setCondaPath] = useState("")
   const [seed, setSeed] = useState(54288)
@@ -228,6 +230,29 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
     console.log("Mongo result from start ", mongoResult)
   }
 
+  /**
+   * Restart the MongoDB server and the app's connection to it, used when the connection
+   * is refused (ex: connect ECONNREFUSED 127.0.0.1:54017) although the server seems running
+   */
+  const restartMongo = async () => {
+    setIsRestartingMongo(true)
+    try {
+      // Forget the cached client so the next MongoDB call connects to the restarted server
+      await resetConnection()
+      const isRunning = await ipcRenderer.invoke("restartMongoDB")
+      if (isRunning) {
+        toast.success("MongoDB server restarted")
+      } else {
+        toast.error("MongoDB server could not be restarted. Make sure a workspace is open.")
+      }
+    } catch (error) {
+      toast.error(`Error while restarting the MongoDB server: ${error?.message || error}`)
+    } finally {
+      if (isMountedRef.current) setIsRestartingMongo(false)
+      checkMongoIsRunning()
+    }
+  }
+
   const installMongoDB = () => {
     ipcRenderer.invoke("installMongoDB").then((success) => {
       console.log("MongoDB installed: ", success)
@@ -377,7 +402,17 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
                       startMongo()
                     }}
                     style={{ backgroundColor: mongoServerIsRunning ? "grey" : "#54a559", borderColor: mongoServerIsRunning ? "grey" : "#54a559", marginRight: "1rem" }}
-                    disabled={mongoServerIsRunning}
+                    disabled={mongoServerIsRunning || isRestartingMongo}
+                  />
+                  <Button
+                    label="Restart server"
+                    icon="pi pi-refresh"
+                    className="p-button-secondary"
+                    tooltip="Restart the MongoDB server and reconnect to it (ex: when the connection is refused)"
+                    onClick={restartMongo}
+                    loading={isRestartingMongo}
+                    disabled={isRestartingMongo}
+                    style={{ marginRight: "1rem" }}
                   />
                   {process.env.NODE_ENV === "development" && (
                     <>
