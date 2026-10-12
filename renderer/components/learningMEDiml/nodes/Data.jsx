@@ -61,8 +61,7 @@ const Data = ({ id, data, type }) => {
 
   useEffect(() => {
     if (!data.setupParam.possibleSettings.defaultSettings.featuresFiles.length){
-      data.setupParam.possibleSettings.defaultSettings.featuresFiles = data.internal.settings.featuresFiles
-      setFeaturesFiles(data.internal.settings.featuresFiles)
+      saveFeaturesFiles(data.internal.settings.featuresFiles)
     }
     if (!data.setupParam.possibleSettings.defaultSettings.path) {
       data.setupParam.possibleSettings.defaultSettings.path = data.internal.settings.path
@@ -103,6 +102,15 @@ const Data = ({ id, data, type }) => {
     }
   }
 
+  /** Saves the selected features files, always as a list (never null) */
+  const saveFeaturesFiles = (files) => {
+    const selectedFiles = Array.isArray(files) ? files : []
+    setFeaturesFiles(selectedFiles)
+    data.setupParam.possibleSettings.defaultSettings.featuresFiles = selectedFiles
+    data.internal.settings.featuresFiles = selectedFiles
+    updateHasWarning(data)
+  }
+
   const handleSaveFolderChange = (directoryPath) => {
     setSelectedFolder(directoryPath)
     const globalData = medDataStore.snapshot()
@@ -124,7 +132,11 @@ const Data = ({ id, data, type }) => {
     data.setupParam.possibleSettings.defaultSettings.path = directoryPath
     data.internal.settings.path = directoryPath
     data.setupParam.csv_files = csvFiles
-    updateHasWarning(data)
+    // Keep only the selected files found in the folder: an imported scene (or a change of folder) can hold
+    // files missing here, which the MultiSelect shows as null and which would still be sent to the backend
+    const availableFiles = new Set(csvFiles.map((file) => file.value))
+    const savedFiles = Array.isArray(data.internal.settings.featuresFiles) ? data.internal.settings.featuresFiles : []
+    saveFeaturesFiles(savedFiles.filter((file) => availableFiles.has(file)))
     setReload(!reload)
   }
 
@@ -194,12 +206,9 @@ const Data = ({ id, data, type }) => {
                 style={{ maxWidth: "100%", height: "auto", width: "auto" }}
                 value={featuresFiles} 
                 onChange={(e) => {
-                  setFeaturesFiles(e.value)
-                  data.setupParam.possibleSettings.defaultSettings.featuresFiles = e.value
-                  data.internal.settings.featuresFiles = e.value
-                  updateHasWarning(data)
+                  saveFeaturesFiles(e.value)
                   setReload(!reload)
-                }} 
+                }}
                 options={listCSVFiles} 
                 optionLabel="name" 
                 filter 
