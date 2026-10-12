@@ -2,6 +2,8 @@ import numpy as np
 import plotly.graph_objects as go
 from skimage import measure
 
+MAX_SLICE_SIZE = 256  # maximum number of pixels displayed per side of a slice
+
 
 def frame_args(duration):
     return {
@@ -39,12 +41,19 @@ class Figure:
                         mask_point = mask_points[k][array][point]
                         self.volume[k][mask_point[0]][mask_point[1]] = self.max
 
+        # The figure holds every slice and is opened in the browser: large slices (ex: 512x512 CT) give a figure too
+        # heavy to be displayed (over 1 GB for 267 slices), so the slices are downsampled for display
+        step = max(1, int(np.ceil(max(self.x, self.y) / MAX_SLICE_SIZE)))
+        self.volume = self.volume[:, ::step, ::step]
+        self.x, self.y = self.volume[0].shape
+        self.min = np.min(self.volume)
 
         # Figure initialization with plotly graph object
+        # (the z plane of a slice is constant, uint16 keeps it light in the figure)
         self.fig = go.Figure(frames=[go.Frame(data=[go.Surface(
-            z=(self.nb_frames - 1 - k) * np.ones((self.x, self.y)),
+            z=(self.nb_frames - 1 - k) * np.ones((self.x, self.y), dtype=np.uint16),
             surfacecolor=np.flipud(self.volume[self.nb_frames - 1 - k]),
-            cmin=np.min(self.volume), cmax=np.max(self.volume)
+            cmin=self.min, cmax=self.max
         ), ],
             name=str(k)  # you need to name the frame for the animation to behave properly
         )
@@ -53,10 +62,10 @@ class Figure:
     def add_data(self):
         # Add data to be displayed before animation starts
         self.fig.add_trace(go.Surface(
-            z=(self.nb_frames - 1) * np.ones((self.x, self.y)),
+            z=(self.nb_frames - 1) * np.ones((self.x, self.y), dtype=np.uint16),
             surfacecolor=np.flipud(self.volume[self.nb_frames - 1]),
             colorscale='Gray',
-            cmin=np.min(self.volume), cmax=np.max(self.volume),
+            cmin=self.min, cmax=self.max,
             colorbar=dict(thickness=20, ticklen=4)
         ))
 

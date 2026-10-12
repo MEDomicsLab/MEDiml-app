@@ -295,8 +295,9 @@ class MEDimlExtraction:
                 # Get the output of the node where the 3D view button was clicked
                 node, pipeline = extraction_workflow.get_node_pipeline(self.json_config["id"])
                 
-                # If the node is an input node, and is not yet in the extraction workflow, use the file name to load the MEDiml object directly
-                if node is None and self.json_config["name"] == "input" and "file_loaded" in self.json_config:
+                # If the node is an input node, and is not yet in the extraction workflow or another file was uploaded since its last run,
+                # use the file name to load the MEDiml object directly
+                if self.json_config["name"] == "input" and "file_loaded" in self.json_config and (node is None or node.filepath != self.json_config["file_loaded"]):
                     if self.json_config["file_loaded"] != "":
                         # Load the MEDimg object from the input file
                         with open(UPLOAD_FOLDER / self.json_config["file_loaded"], 'rb') as f:
