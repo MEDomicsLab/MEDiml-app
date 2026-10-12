@@ -9,6 +9,9 @@ import pandas as pd
 from ..context import LearningContext
 from ..node import LearningNode
 
+# Mirrors MEDiml.learning.ml_utils.DEFAULT_OUTCOMES_FILENAME: the outcomes table MEDiml reads from the
+# experiments workspace when no outcomes file is given
+DEFAULT_OUTCOMES_FILENAME = "outcomes.csv"
 
 def _radiomics_table_name(feature_file: str) -> str:
     """Returns the "<scan>(<roi>)__<space>" part of a "radiomics__<scan>(<roi>)__<space>.csv" file name."""
@@ -111,7 +114,14 @@ class DataNode(LearningNode):
         path_patients_holdout = Path(context.path_study) / "patientsHoldOut.json"
         context.patients_test = MEDiml.utils.load_json(path_patients_holdout) if path_patients_holdout.exists() else []
 
-        return context.path_ws_experiments / "outcomes.csv", path_learn / "final_model_results.json"
+        # Same outcomes file as the experiment, with MEDiml's fallback when none was given
+        path_outcomes = context.path_outcome_file
+        if path_outcomes is None:
+            path_outcomes = context.path_ws_experiments / DEFAULT_OUTCOMES_FILENAME
+        if not Path(path_outcomes).exists():
+            raise FileNotFoundError(f"Outcomes file {path_outcomes} was not found.")
+
+        return Path(path_outcomes), path_learn / "final_model_results.json"
 
     def generate_code(self, file_obj, settings: dict[str, Any]) -> None:
         self._write_lines(
