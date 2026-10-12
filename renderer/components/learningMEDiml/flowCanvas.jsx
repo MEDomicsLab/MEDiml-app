@@ -1,3 +1,4 @@
+import { confirmDialog } from "primereact/confirmdialog"
 import { useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { toast } from "react-toastify"
 
@@ -1434,14 +1435,27 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
       toast.error(error.message)
       return
     }
-    if (nodes.length > 0 && !confirm(`Importing ${file.name} will replace the current scene.\nUnsaved changes will be lost.`)) {
+    const loadScene = () => {
+      updateScene(scene)
+      // Imported scenes come without results
+      setIsResults(false)
+      setShowResultsPane(false)
+      toast.success(`Scene imported from ${file.name}. Save the scene to keep it.`)
+    }
+    if (nodes.length === 0) {
+      loadScene()
       return
     }
-    updateScene(scene)
-    // Imported scenes come without results
-    setIsResults(false)
-    setShowResultsPane(false)
-    toast.success(`Scene imported from ${file.name}. Save the scene to keep it.`)
+    // In-page dialog rather than the native confirm(): on Windows, a native confirm() opened right after
+    // the file dialog closes leaves the page without keyboard focus, so no input accepts typing anymore
+    confirmDialog({
+      message: `Importing ${file.name} will replace the current scene. Unsaved changes will be lost.`,
+      header: "Import Scene",
+      icon: "pi pi-exclamation-triangle",
+      acceptLabel: "Import",
+      rejectLabel: "Cancel",
+      accept: loadScene
+    })
   }, [nodes])
 
   /**
