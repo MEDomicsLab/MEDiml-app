@@ -657,7 +657,7 @@ const ResultsPaneMEDiml = () => {
       flowContent.nodes.map((node) => {
         if (node.type === "Analyze"){
           // Images
-          if (node.data.internal.results.hasOwnProperty("figures")){
+          if (node.data.internal.results?.hasOwnProperty("figures")){
             // Heatmap
             if (node.data.internal.results.figures.hasOwnProperty("heatmap")){
               if (node.data.internal.results.figures.hasOwnProperty("heatmap")){
@@ -678,7 +678,7 @@ const ResultsPaneMEDiml = () => {
             }
           }
           // Results - Metrics
-          if (node.data.internal.results.hasOwnProperty("results_avg")){
+          if (node.data.internal.results?.hasOwnProperty("results_avg")){
             setSelectedResults(node.data.internal.results.results_avg)
             // Histograms
             try{
@@ -709,11 +709,11 @@ const ResultsPaneMEDiml = () => {
               console.error("Error detected while processing histograms", error)
             }
           }
-          if (node.data.internal.results.hasOwnProperty("pipelines")){
+          if (node.data.internal.results?.hasOwnProperty("pipelines")){
             setSelectedPipelines(node.data.internal.results.pipelines)
           }
-          setFinalModels(node.data.internal.results.final_models || {})
-          if (node.data.internal.results.hasOwnProperty("experiments")){
+          setFinalModels(node.data.internal.results?.final_models || {})
+          if (node.data.internal.results?.hasOwnProperty("experiments")){
             setExpNames(node.data.internal.results.experiments)
           }
         }
