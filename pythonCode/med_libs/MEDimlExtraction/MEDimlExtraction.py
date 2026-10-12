@@ -900,7 +900,9 @@ class MEDimlExtraction:
         Splits a radiomics table (.csv) into one table per feature category (morph, intensity, texture,
         and unknown for the features matching no category), using its definitions (.txt) file.
 
-        Each category is saved in `<csv folder>/<category>/` as a `.csv` and `.txt` pair, with the `image`
+        Each category is saved in `<csv folder>/<modality>/<category>/` as a `.csv` and `.txt` pair, where the
+        imaging modality is the part of the table name before its first "(" (e.g. CT for radiomics__CT(GTV)__image.csv),
+        and the `<modality>` subfolder is skipped when it cannot be found. The `image`
         space of the table name replaced by the category tag (e.g. radiomics__PET(GTV)__morph.csv), which keeps
         the `radiomics__<scan>(<roi>)__<space>` naming the learning module relies on. Filtered spaces are kept
         and tagged (e.g. __log_sigma1_morph) so the tables of different spaces do not overwrite each other.
@@ -943,6 +945,12 @@ class MEDimlExtraction:
                 )
                 columns[category].append(var)
 
+            # Imaging modality of the table, e.g. CT for radiomics__CT(GTV)__image.csv
+            modality = ''
+            if '(' in path_csv.stem:
+                modality = path_csv.stem.split('(', 1)[0].rpartition('__')[2].strip()
+            base_folder = path_csv.parent / modality if modality else path_csv.parent
+
             categories = {}
             for category, variables in columns.items():
                 if not variables:
@@ -956,8 +964,8 @@ class MEDimlExtraction:
                     name = f'{head}{sep}{tag}'
                 else:
                     name = f'{head}{sep}{space}_{tag}'
-                folder = path_csv.parent / category
-                folder.mkdir(exist_ok=True)
+                folder = base_folder / category
+                folder.mkdir(parents=True, exist_ok=True)
                 csv_save = folder / (name + '.csv')
                 txt_save = folder / (name + '.txt')
                 table[variables].set_axis(new_names, axis=1).to_csv(csv_save, encoding='utf-8')
