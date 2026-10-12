@@ -77,7 +77,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
   const [selectedSaveFolder, setSelectedSaveFolder] = useState('')
   const [selectedSavePreChecksFolder, setSelectedSavePreChecksFolder] = useState('')
   const [selectedNpyFolder, setSelectedNpyFolder] = useState('')
-  const [selectedNBatch, setSelectedNBatch] = useState(12)
+  const [selectedNBatch, setSelectedNBatch] = useState(4)
   const [selectedCSVFile, setSelectedCSVFile] = useState('')
   const [selectedPreChecksOptions, setSelectedPreChecksOptions] = useState(null)
   const [selectedInstitutions, setSelectedInstitutions] = useState([])
