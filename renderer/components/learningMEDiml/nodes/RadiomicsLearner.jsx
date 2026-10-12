@@ -158,7 +158,7 @@ const RadiomicsLearner = ({ id, data, type }) => {
               {/* nFeaturesToSelect */}
               <Form.Group controlId="nFeaturesToSelect" style={sectionStyle}>
               <Form.Label className="nFeaturesToSelect">Variable Importance Threshold</Form.Label>
-              <Caption>Higher threshold keeps fewer important variables in the model.</Caption>
+              <Caption>If less than 1: Acts as a threshold. If greater than 1: Specifies the exact number of features to select.</Caption>
                 <InputNumber
                     style={{width: "300px"}}
                     buttonLayout="horizontal"
@@ -167,7 +167,6 @@ const RadiomicsLearner = ({ id, data, type }) => {
                     mode="decimal"
                     showButtons
                     min={0.01}
-                    max={0.99}
                     step={0.01}
                     maxFractionDigits={2}
                     incrementButtonClassName="p-button-info"

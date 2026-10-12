@@ -413,8 +413,8 @@ export const updateHasWarning = (data) => {
     } else if (learnerParams.nFeaturesToSelect === null || learnerParams.nFeaturesToSelect === ""){
       data.internal.hasWarning = { state: true, tooltip: <p>Varialble importance cut-off threshold is not given!</p> }
       return
-    } else if (learnerParams.nFeaturesToSelect < 0 || learnerParams.nFeaturesToSelect > 1){
-      data.internal.hasWarning = { state: true, tooltip: <p>Varialble importance cut-off threshold must be between 0 and 1!</p> }
+    } else if (learnerParams.nFeaturesToSelect < 0 ){
+      data.internal.hasWarning = { state: true, tooltip: <p>Varialble importance cut-off threshold must be a positive number!</p> }
       return
     } else if (learnerParams.seed === null || learnerParams.seed === ""){
       data.internal.hasWarning = { state: true, tooltip: <p>Seed for the random generator is not given!</p> }
