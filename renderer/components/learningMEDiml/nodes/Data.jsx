@@ -43,8 +43,8 @@ const folderOptionTemplate = (option) => (
  */
 const Data = ({ id, data, type }) => {  
   const [reload, setReload] = useState(false)
-  const [featuresFiles, setFeaturesFiles] = useState([])
-  const [selectedFolder, setSelectedFolder] = useState("") // Selected folder
+  const [featuresFiles, setFeaturesFiles] = useState(Array.isArray(data.internal.settings.featuresFiles) ? data.internal.settings.featuresFiles : [])
+  const [selectedFolder, setSelectedFolder] = useState(data.internal.settings.path || "") // Selected folder
   const [listWSFolders, setListWSFolders] = useState([]) // List of folders in the workspace
   const [listCSVFiles, setListCSVFiles] = useState([]) // List of csv files in the workspace
   const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to

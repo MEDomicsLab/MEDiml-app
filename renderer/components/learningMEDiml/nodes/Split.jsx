@@ -22,7 +22,7 @@ import { useMEDDataObjectsByType, useMEDDataStore } from "../../workspace/useMED
  */
 const Split = ({ id, data, type }) => {  
   const [selectedCSVFile, setSelectedCSVFile] = useState(data.internal.settings.path_outcome_file || "") // Selected CSV file
-  const [selectedSaveFolder, setSelectedSaveFolder] = useState("") // Selected save folder
+  const [selectedSaveFolder, setSelectedSaveFolder] = useState(data.internal.settings.path_save_experiments || "") // Selected save folder
   const [selectedWSFolder, setSelectedWSFolder] = useState(data.internal.settings.path_ws_experiments || "") // Selected workspace folder
   const [listCSVFiles, setListCSVFiles] = useState([]) // List of csv files in the workspace
   const [listWSFolders, setListWSFolders] = useState([]) // List of folders in the workspace

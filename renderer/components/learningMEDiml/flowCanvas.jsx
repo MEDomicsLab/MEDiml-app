@@ -1,5 +1,6 @@
 import { confirmDialog } from "primereact/confirmdialog"
 import { useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { flushSync } from "react-dom"
 import { toast } from "react-toastify"
 
 // Import utilities
@@ -54,6 +55,35 @@ const SCENE_FILE_VERSION = 1
 
 // Key of a node in nodesParams.learningMEDiml, as used by updateScene to restore its setupParam
 const getSetupParamKey = (node) => node.name?.toLowerCase().replaceAll(" ", "_").replaceAll("-", "_")
+
+/**
+ * @param {Object} node node of a loaded, imported or default scene (its setupParam is not saved)
+ * @description
+ * Restores the setupParam of the node. The nodes display setupParam.possibleSettings.defaultSettings but save and
+ * run with internal.settings: both are the same object for a new node (see addSpecificToNode), and must be again
+ * for a loaded node. Otherwise the node displays the default settings while it keeps, saves and runs its own ones.
+ * The settings missing from the node (e.g. added since the scene was saved) take their default value.
+ */
+const restoreSetupParam = (node) => {
+  const setupParam = deepCopy(staticNodesParams.learningMEDiml[getSetupParamKey(node)])
+  node.data.setupParam = setupParam
+  const defaultSettings = setupParam?.possibleSettings?.defaultSettings
+  if (!defaultSettings || !node.data.internal) return
+  node.data.internal.settings = mergeSettings(defaultSettings, node.data.internal.settings)
+}
+
+/**
+ * @param {Object} target settings receiving the values (modified in place)
+ * @param {Object} source settings whose values are kept
+ * @returns {Object} target, with the values of source merged into its nested objects (arrays are replaced)
+ */
+const mergeSettings = (target, source) => {
+  const isPlainObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value)
+  Object.entries(source || {}).forEach(([key, value]) => {
+    target[key] = isPlainObject(value) && isPlainObject(target[key]) ? mergeSettings(target[key], value) : value
+  })
+  return target
+}
 
 // Guiding boxes added to every scene: each node must be placed inside the box of its section
 // (see section in learningMEDimlNodesParams). The Analyze node is the analysis step, it has no box.
@@ -1261,23 +1291,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
           console.log("loaded flow", flow)
 
           // TODO : should have conditions regarding json file used for import!
-          // For each nodes in the json file, add the specific parameters
-          Object.values(flow.nodes).forEach((node) => {
-            // the line below is important because functions are not serializable
-            // set workflow type
-            let subworkflowType = node.data.internal.subflowId != "MAIN" ? "learningMEDiml" : "learningMEDiml"
-            // set node type
-            let setupParams = deepCopy(nodesParams[subworkflowType][node.name.toLowerCase().replaceAll(" ", "_").replaceAll("-", "_")])
-            console.log("setupParams", setupParams)
-            node.data.setupParam = setupParams
-          })
-
-          if (flow) {
-            const { x = 0, y = 0, zoom = 1 } = flow.viewport
-            setNodes(flow.nodes || [])
-            setEdges(flow.edges || [])
-            setViewport({ x, y, zoom })
-          }
+          updateScene(flow)
         } catch (error) {
           toast.warn("Error loading file : ", error)
         }
@@ -1303,27 +1317,11 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
       // If the user confirms, load the json file
       const restoreFlow = async () => {
         try {
-          const flow = require("../../public/setupVariables/possibleSettings/learningMEDiml/learningMEDimlDefaultWorkflow.json")
+          // Copied, so the edits of the scene do not change the default workflow loaded the next time
+          const flow = deepCopy(require("../../public/setupVariables/possibleSettings/learningMEDiml/learningMEDimlDefaultWorkflow.json"))
           console.log("loaded flow", flow)
 
-          // TODO : should have conditions regarding json file used for import!
-          // For each nodes in the json file, add the specific parameters
-          Object.values(flow.nodes).forEach((node) => {
-            // the line below is important because functions are not serializable
-            // set workflow type
-            let subworkflowType = node.data.internal.subflowId != "MAIN" ? "learningMEDiml" : "learningMEDiml"
-            // set node type
-            let setupParams = deepCopy(nodesParams[subworkflowType][node.name.toLowerCase().replaceAll(" ", "_").replaceAll("-", "_")])
-            console.log("setupParams", setupParams)
-            node.data.setupParam = setupParams
-          })
-
-          if (flow) {
-            const { x = 0, y = 0, zoom = 1 } = flow.viewport
-            setNodes(flow.nodes || [])
-            setEdges(flow.edges || [])
-            setViewport({ x, y, zoom })
-          }
+          updateScene(flow)
         } catch (error) {
           toast.warn("Error loading file : ", error)
         }
@@ -1345,13 +1343,14 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
       // For each nodes in the json file, add the specific parameters
       Object.values(newScene.nodes).forEach((node) => {
         // the line below is important because functions are not serializable
-        // set workflow type and get default parameters
-        let subworkflowType = node.data.internal.subflowId != "MAIN" ? "learningMEDiml" : "learningMEDiml"
-        let setupParams = deepCopy(nodesParams[subworkflowType][node.name.toLowerCase().replaceAll(" ", "_").replaceAll("-", "_")])
-        node.data.setupParam = setupParams
+        restoreSetupParam(node)
         updateHasWarning(node.data)
       })
-      const { x = 0, y = 0, zoom = 1 } = newScene.viewport
+      // Empties the canvas first, so the node components are created again for the new scene: a node keeping
+      // the id of a node of the previous scene would otherwise keep the state of its component (e.g. selected
+      // folders) and skip its initialization, displaying the previous settings while saving the new ones
+      flushSync(() => setNodes([]))
+      const { x = 0, y = 0, zoom = 1 } = newScene.viewport || {}
       setNodes(newScene.nodes || [])
       setEdges(newScene.edges || [])
       setViewport({ x, y, zoom })
