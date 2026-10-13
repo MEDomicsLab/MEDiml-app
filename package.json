@@ -33,6 +33,7 @@
       "./pythonEnv/**/*"
     ],
     "extends": null,
+    "afterSign": "./utilScripts/macAfterSign.js",
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": "dmg"

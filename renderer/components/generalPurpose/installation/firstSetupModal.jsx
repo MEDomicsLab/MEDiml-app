@@ -22,6 +22,7 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
   const [checkIsRunning, setCheckIsRunning] = useState(false)
   const [localRequirementsMet, setLocalRequirementsMet] = useState(false)
   const [clicked, setClicked] = useState(false)
+  const [installErrors, setInstallErrors] = useState([]) // Errors of the installations that failed, the setup can be retried
 
   const checkPython = () => {
     ipcRenderer.invoke("getBundledPythonEnvironment").then((data) => {
@@ -49,21 +50,46 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
     })
   }
 
+  /**
+   * @param {String} name Name of what failed to install
+   * @param {Error} error Error of the installation
+   */
+  const reportInstallError = (name, error) => {
+    console.error(`${name} installation failed: `, error)
+    // Keep the end of the message, the start of an IPC error is always "Error invoking remote method ..."
+    const message = String(error?.message || error).split("\n").filter(Boolean).slice(-3).join(" ")
+    setInstallErrors((prev) => [...prev, `${name} installation failed: ${message}`])
+  }
+
   const installPython = () => {
     setPythonIsInstalling(true)
-    ipcRenderer.invoke("installBundledPythonExecutable").then((data) => {
-      console.log("Python installation: ", data)
-    })
+    return ipcRenderer
+      .invoke("installBundledPythonExecutable")
+      .then((data) => {
+        console.log("Python installation: ", data)
+        if (data === false) reportInstallError("Python", "the Python executable was not found after the installation")
+      })
+      .catch((error) => reportInstallError("Python", error))
+      .finally(() => setPythonIsInstalling(false))
   }
 
   const installMongoDB = () => {
-    ipcRenderer.invoke("installMongoDB")
+    return ipcRenderer
+      .invoke("installMongoDB")
+      .then((data) => {
+        console.log("MongoDB installation: ", data)
+        if (data === false) reportInstallError("MongoDB", "MongoDB was not found after the installation")
+      })
+      .catch((error) => reportInstallError("MongoDB", error))
   }
 
   const startSetup = () => {
     setClicked(true)
-    if (!mongoDBIsInstalled) installMongoDB()
-    installPython()
+    setInstallErrors([])
+    const installations = [installPython()]
+    if (!mongoDBIsInstalled) installations.push(installMongoDB())
+    // Allow the setup to be started again once every installation is over, to retry the failed ones
+    Promise.all(installations).finally(() => setClicked(false))
   }
 
   const closeFirstSetupModal = () => {
@@ -205,32 +231,18 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
       ipcRenderer.invoke("checkRequirements").then((data) => {
         console.log("Requirements: ", data)
         setCheckIsRunning(false)
-        let pythonIsFullyInstalled = false
-        if (data.pythonInstalled) {
-          // Check if the python requirements are met
-          ipcRenderer.invoke("checkPythonRequirements").then((pythonRequirements) => {
-            console.log("Python requirements met: ", pythonRequirements)
-            if (pythonRequirements) {
-              setPythonIsInstalled(true)
-              setPythonInstallationProgress(100)
-              console.log("Python requirements met 2: ", pythonRequirements)
-              pythonIsFullyInstalled = true
-            }
-
-            if (data.mongoDBInstalled) {
-              setMongoDBIsInstalled(true)
-              setMongoDBInstallationProgress(100)
-            }
-
-            if (data.mongoDBInstalled && pythonIsFullyInstalled) {
-              console.log("REQUIREMENTS MET")
-              try {
-                setLocalRequirementsMet(true)
-              } catch (error) {
-                console.warn(error)
-              }
-            }
-          })
+        // checkRequirements also checks the Python packages, as an installed Python without them can't run the app
+        if (data.pythonInstalled && data.pythonRequirementsMet) {
+          setPythonIsInstalled(true)
+          setPythonInstallationProgress(100)
+        }
+        if (data.mongoDBInstalled) {
+          setMongoDBIsInstalled(true)
+          setMongoDBInstallationProgress(100)
+        }
+        if (data.mongoDBInstalled && data.pythonInstalled && data.pythonRequirementsMet) {
+          console.log("REQUIREMENTS MET")
+          setLocalRequirementsMet(true)
         }
       })
     }, 5000)
@@ -274,6 +286,11 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
             color={pythonInstallationProgress == 100 && pythonIsInstalled ? "#22c55e" : ""}
           />
         </div>
+        {installErrors.map((error, index) => (
+          <p key={index} style={{ color: "#d55757", marginTop: "0.5rem" }}>
+            {error}
+          </p>
+        ))}
         <div className="p-end p-row-12" style={{ display: "flex", flexDirection: "row-reverse" }}>
           {(
               <Button 
@@ -286,7 +303,7 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
         </div>
       </div>
       {/* Terminal Notification Panel */}
-      {(clicked) && <div
+      {(clicked || installErrors.length > 0) && <div
         style={{
           backgroundColor: "#000",
           color: "#00ff00",

@@ -1,7 +1,7 @@
 import { app } from "electron"
 import fs from "fs"
 import { getMongoDBPath, mainWindow } from "../background"
-import { execCallbacksForChildWithNotifications, getBundledPythonEnvironment } from "../utils/pythonEnv"
+import { checkPythonRequirements, execCallbacksForChildWithNotifications, getBundledPythonEnvironment, isAppleSilicon, runInstallationStep } from "../utils/pythonEnv"
 
 //**** LOG ****// This is used to send the console.log messages to the main window
 const originalConsoleLog = console.log
@@ -22,43 +22,8 @@ console.log = function () {
 }
 
 
-export const checkIsBrewInstalled = async () => {
-  let isBrewInstalled = false
-  try {
-    let { stdout, stderr } = await exec(`brew --version`)
-    isBrewInstalled = stdout !== "" && stderr === ""
-  } catch (error) {
-    isBrewInstalled = false
-  }
-  return isBrewInstalled
-}
-
-export const checkIsXcodeSelectInstalled = async () => {
-  let isXcodeSelectInstalled = false
-  try {
-    let { stdout, stderr } = await exec(`xcode-select -p`)
-    isXcodeSelectInstalled = stdout !== "" && stderr === ""
-  } catch (error) {
-    isXcodeSelectInstalled = false
-  }
-}
-
-export const installBrew = async () => {
-  let installBrewPromise = exec(`/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`)
-  execCallbacksForChildWithNotifications(installBrewPromise.child, "Installing Homebrew", mainWindow)
-  await installBrewPromise
-  return true
-}
-
-export const installXcodeSelect = async () => {
-  let installXcodeSelectPromise = exec(`xcode-select --install`)
-  execCallbacksForChildWithNotifications(installXcodeSelectPromise.child, "Installing Xcode Command Line Tools", mainWindow)
-  await installXcodeSelectPromise
-  return true
-}
-
-
 var path = require("path")
+const os = require("os")
 const util = require("util")
 const exec = util.promisify(require("child_process").exec)
 
@@ -71,9 +36,13 @@ export const checkRequirements = async () => {
   let mongoDBInstalled = getMongoDBPath()
   let pythonInstalled = getBundledPythonEnvironment()
 
+  // An installed Python is not enough, the app needs its packages (they are missing when their installation failed)
+  let pythonRequirementsMet = pythonInstalled !== null && checkPythonRequirements(pythonInstalled)
+
   console.log("MongoDB installed: " + mongoDBInstalled)
   console.log("Python installed: " + pythonInstalled)
-  return { pythonInstalled: pythonInstalled, mongoDBInstalled: mongoDBInstalled }
+  console.log("Python requirements met: " + pythonRequirementsMet)
+  return { pythonInstalled: pythonInstalled, mongoDBInstalled: mongoDBInstalled, pythonRequirementsMet: pythonRequirementsMet }
 }
 
 export const installMongoDB = async () => {
@@ -96,20 +65,22 @@ export const installMongoDB = async () => {
 
     return getMongoDBPath() !== null
   } else if (process.platform === "darwin") {
-    // Check if Homebrew is installed
-    let isBrewInstalled = await checkIsBrewInstalled()
-    if (!isBrewInstalled) {
-      await installBrew()
-    }
-    // Check if Xcode Command Line Tools are installed
-    let isXcodeSelectInstalled = await checkIsXcodeSelectInstalled()
-    if (!isXcodeSelectInstalled) {
-      await installXcodeSelect()
-    }
+    // The official MongoDB archive is installed in ~/.mediml/mongodb, where getMongoDBPath looks for it.
+    // Homebrew is not used: installing it requires an interactive terminal and an administrator password.
+    const mongoDBVersion = "7.0.15"
+    const architecture = isAppleSilicon() ? "arm64" : "x86_64"
+    const archiveName = `mongodb-macos-${architecture}-${mongoDBVersion}.tgz`
+    const downloadUrl = `https://fastdl.mongodb.org/osx/${archiveName}`
+    // Absolute temporary path: the working directory of a packaged app is "/", which is not writable
+    const archivePath = path.join(os.tmpdir(), archiveName)
+    const mongoDBFolder = path.join(app.getPath("home"), ".mediml", "mongodb")
+    fs.mkdirSync(mongoDBFolder, { recursive: true })
 
-    let installMongoDBPromise = exec(`brew tap mongodb/brew && brew install mongodb-community@7.0.12`)
-    execCallbacksForChildWithNotifications(installMongoDBPromise.child, "Installing MongoDB", mainWindow)
-    
+    await runInstallationStep(`curl -fSL --retry 3 -o "${archivePath}" "${downloadUrl}"`, "Downloading MongoDB installer", mainWindow)
+    // The archive holds a single versioned folder (its name differs from the archive's), so it is stripped
+    await runInstallationStep(`tar -xzf "${archivePath}" -C "${mongoDBFolder}" --strip-components 1`, "Installing MongoDB", mainWindow)
+    await runInstallationStep(`rm -f "${archivePath}"`, "Removing MongoDB installer", mainWindow)
+
     return getMongoDBPath() !== null
   } else if (process.platform === "linux") {
     const linuxURLDict = {

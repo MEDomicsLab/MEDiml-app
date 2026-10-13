@@ -214,8 +214,18 @@ jobs:
       - name: Allocate more memory
         run: export NODE_OPTIONS=--max-old-space-size=8192
 
+      # Signing and notarization (utilScripts/macAfterSign.js). Without these secrets the app is ad-hoc signed:
+      # macOS no longer reports it as damaged, but users must allow it once in System Settings > Privacy & Security.
+      #   MAC_CERTIFICATE_P12_BASE64 / MAC_CERTIFICATE_PASSWORD: "Developer ID Application" certificate (.p12, base64)
+      #   APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID: Apple account used to notarize the app
       - name: Build for Mac
         run: npm run build:mac
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Get tag name
         id: get-tag

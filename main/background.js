@@ -546,19 +546,8 @@ app.on("before-quit", async (event) => {
   event.preventDefault()
   isQuitting = true
   
-  console.log("App quitting — cleaning up terminals and services...")
-  
-  try {
-    // Wait for all PTY processes to exit gracefully (up to 3 seconds)
-    // This prevents the node-pty SIGABRT crash caused by thread::join()
-    // blocking during teardown when child processes haven't exited yet
-    await terminalManager.cleanupAsync(3000)
-  } catch (error) {
-    console.error("Error during terminal cleanup:", error)
-    // Fallback: force-kill synchronously
-    terminalManager.cleanup()
-  }
-  
+  console.log("App quitting — cleaning up services...")
+
   // Stop the workspace filesystem watcher
   try {
     await stopWorkspaceWatcher()

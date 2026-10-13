@@ -1,9 +1,13 @@
-import { app } from "electron"
+import { app, dialog } from "electron"
 const fs = require("fs")
+const os = require("os")
 var path = require("path")
 const util = require("util")
 const { execSync, execFileSync, spawn } = require("child_process")
 const exec = util.promisify(require("child_process").exec)
+
+// Output buffer of the installation commands (pip, tar, curl), large enough for their verbose output
+const INSTALLATION_MAX_BUFFER = 100 * 1024 * 1024
 
 export function getPythonEnvironment(medCondaEnv = "med_conda_env") {
   // Returns the python environment
@@ -285,18 +289,11 @@ export function getInstalledPythonPackages(pythonPath = null) {
 
 export async function installPythonPackage(mainWindow, pythonPath, packageName = null, requirementsFilePath = null) {
   console.log("Installing python package: ", packageName, requirementsFilePath, " with pythonPath: ", pythonPath)
-  let execSyncResult = null
-  let pipUpgradePromise = exec(`${pythonPath} -m pip install --upgrade pip`)
-  execCallbacksForChildWithNotifications(pipUpgradePromise.child, "Python pip Upgrade", mainWindow)
-  await pipUpgradePromise
+  await runInstallationStep(`"${pythonPath}" -m pip install --upgrade pip`, "Python pip Upgrade", mainWindow)
   if (requirementsFilePath !== null) {
-    let installPythonPackagePromise = exec(`${pythonPath} -m pip install -r ${requirementsFilePath}`)
-    execCallbacksForChildWithNotifications(installPythonPackagePromise.child, "Python Package Installation from requirements", mainWindow)
-    await installPythonPackagePromise
+    await runInstallationStep(`"${pythonPath}" -m pip install -r "${requirementsFilePath}"`, "Python Package Installation from requirements", mainWindow)
   } else {
-    let installPythonPackagePromise = exec(`${pythonPath} -m pip install ${packageName}`)
-    execCallbacksForChildWithNotifications(installPythonPackagePromise.child, "Python Package Installation", mainWindow)
-    await installPythonPackagePromise
+    await runInstallationStep(`"${pythonPath}" -m pip install ${packageName}`, "Python Package Installation", mainWindow)
   }
 }
 
@@ -378,80 +375,62 @@ export async function installBundledPythonExecutable(mainWindow) {
       const { stdout: extrac, stderr: extracErr } = await extractionPromise
 
       // Install the required python packages
-      if (process.env.NODE_ENV === "production") {
-        installPythonPackage(mainWindow, pythonExecutablePath, null, path.join(process.cwd(), "resources", "pythonEnv", "requirements.txt"))
-      } else {
-        installPythonPackage(mainWindow, pythonExecutablePath, null, path.join(process.cwd(), "pythonEnv", "requirements.txt"))
-      }
+      await installPythonPackage(mainWindow, pythonExecutablePath, null, getRequirementsFilePath())
       let removeCommand = `rm ${outputFileName}`
       let removePromise = exec(removeCommand, { shell: "powershell.exe" })
       execCallbacksForChildWithNotifications(removePromise.child, "Python Exec. Removing", mainWindow)
       const { stdout: remove, stderr: removeErr } = await removePromise
-    } else if (process.platform == "darwin") {
-      // Download the right python executable (arm64 or x86_64)
-      let isArm64 = process.arch === "arm64"
-      let file = "cpython-3.9.18+20240224-x86_64-apple-darwin-install_only.tar.gz"
-      if (isArm64 === "arm64") {
-        file = `cpython-3.9.18+20240224-aarch64-apple-darwin-install_only.tar.gz`
-      }
-
-      let url = `https://github.com/indygreg/python-build-standalone/releases/download/20240224/${file}`
-      let extractCommand = `tar -xvf ${file} ${pythonParentFolderExtractString}`
-      let downloadPromise = exec(`/bin/bash -c "$(curl -fsSLO ${url})"`)
-      execCallbacksForChildWithNotifications(downloadPromise.child, "Python Downloading", mainWindow)
-      const { stdout, stderr } = await downloadPromise
-
-      // Extract the python executable
-      let extractionPromise = exec(extractCommand)
-      execCallbacksForChildWithNotifications(extractionPromise.child, "Python Exec. Extracting", mainWindow)
-      const { stdout: extrac, stderr: extracErr } = await extractionPromise
-
-      // Remove the downloaded file
-      let removeCommand = `rm ${file}`
-      let removePromise = exec(removeCommand)
-      execCallbacksForChildWithNotifications(removePromise.child, "Python Exec. Removing", mainWindow)
-      const { stdout: remove, stderr: removeErr } = await removePromise
-
-      // Install the required python packages
-      if (process.env.NODE_ENV === "production") {
-        installPythonPackage(mainWindow, pythonExecutablePath, null, path.join(process.resourcesPath, "pythonEnv", "requirements_mac.txt"))
+    } else {
+      // macOS and Linux: the archive extracts to a "python" folder, so it is extracted in the parent of bundledPythonPath
+      let file = null
+      if (process.platform == "darwin") {
+        // Apple Silicon is detected from the hardware, as process.arch is x64 when the app runs under Rosetta
+        file = isAppleSilicon() ? "cpython-3.9.18+20240224-aarch64-apple-darwin-install_only.tar.gz" : "cpython-3.9.18+20240224-x86_64-apple-darwin-install_only.tar.gz"
       } else {
-        installPythonPackage(mainWindow, pythonExecutablePath, null, path.join(process.cwd(), "pythonEnv", "requirements_mac.txt"))
+        file = process.arch === "arm64" ? "cpython-3.9.18+20240224-aarch64-unknown-linux-gnu-install_only.tar.gz" : "cpython-3.9.18+20240224-x86_64_v3-unknown-linux-gnu-install_only.tar.gz"
       }
-    } else if (process.platform == "linux") {
-      // Download the right python executable (arm64 or x86_64)
-      // https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18+20240224-x86_64_v4-unknown-linux-gnu-install_only.tar.gz      let file = "cpython-3.9.18+20240224-x86_64_v4-unknown-linux-gnu-install_only.tar.gz"
-      let file = "cpython-3.9.18+20240224-x86_64_v3-unknown-linux-gnu-install_only.tar.gz"
-      if (process.arch === "arm64") {
-        file = "cpython-3.9.18+20240224-aarch64-unknown-linux-gnu-install_only.tar.gz"
+      const url = `https://github.com/indygreg/python-build-standalone/releases/download/20240224/${file}`
+      // The archive is downloaded to an absolute temporary path: the working directory of a packaged app is not
+      // writable (it is "/" on macOS), so a relative download fails and the extraction finds no archive
+      const archivePath = path.join(os.tmpdir(), file)
+      const extractFolder = path.dirname(bundledPythonPath)
+
+      await runInstallationStep(`curl -fSL --retry 3 -o "${archivePath}" "${url}"`, "Python Downloading", mainWindow)
+      await runInstallationStep(`tar -xzf "${archivePath}" -C "${extractFolder}"`, "Python Exec. Extracting", mainWindow)
+      await runInstallationStep(`rm -f "${archivePath}"`, "Python Exec. Removing", mainWindow)
+
+      if (!fs.existsSync(pythonExecutablePath)) {
+        throw new Error(`Python was extracted but its executable was not found at ${pythonExecutablePath}`)
       }
-
-      let url = `https://github.com/indygreg/python-build-standalone/releases/download/20240224/${file}`
-      let extractCommand = `tar -xvf ${file}  ${pythonParentFolderExtractString}`
-
-      let downloadPromise = exec(`wget ${url}`)
-      execCallbacksForChildWithNotifications(downloadPromise.child, "Python Downloading", mainWindow)
-      const { stdout: download, stderr: downlaodErr } = await downloadPromise
-      // Extract the python executable
-      let extractionPromise = exec(extractCommand)
-      execCallbacksForChildWithNotifications(extractionPromise.child, "Python Exec. Extracting", mainWindow)
-      const { stdout: extrac, stderr: extracErr } = await extractionPromise
-
-      // Remove the downloaded file
-      let removeCommand = `rm ${file}`
-      let removePromise = exec(removeCommand)
-      execCallbacksForChildWithNotifications(removePromise.child, "Python Exec. Removing", mainWindow)
-      const { stdout: remove, stderr: removeErr } = await removePromise
-
-      console.log("pythonExecutablePath: ", pythonExecutablePath)
-      console.log("process.cwd(): ", process)
-      console.log("process.resourcesPath: ", process.resourcesPath)
       // Install the required python packages
-      if (process.env.NODE_ENV === "production") {
-        installPythonPackage(mainWindow, pythonExecutablePath, null, path.join(process.resourcesPath, "pythonEnv", "requirements.txt"))
-      } else {
-        installPythonPackage(mainWindow, pythonExecutablePath, null, path.join(process.cwd(), "pythonEnv", "requirements.txt"))
-      }
+      await installPythonPackage(mainWindow, pythonExecutablePath, null, getRequirementsFilePath())
     }
+  }
+  return getBundledPythonEnvironment() !== null
+}
+
+/**
+ * @description Runs one step of an installation, streaming its output to the notification area
+ * @param {String} command The shell command to run
+ * @param {String} id The notification id, its header must name what is installed (e.g. "Python", "MongoDB")
+ * @param {BrowserWindow} mainWindow The main window, receiving the notifications
+ * @returns {Promise<{stdout: String, stderr: String}>} Rejects with the output of the command if it fails
+ */
+export async function runInstallationStep(command, id, mainWindow) {
+  // pip and tar are verbose, the default 1 MB buffer would kill them before they finish
+  const promise = exec(command, { maxBuffer: INSTALLATION_MAX_BUFFER })
+  execCallbacksForChildWithNotifications(promise.child, id, mainWindow)
+  return promise
+}
+
+/**
+ * @returns {Boolean} True on an Apple Silicon Mac, even when the app runs under Rosetta
+ */
+export function isAppleSilicon() {
+  if (process.arch === "arm64") return true
+  try {
+    return execSync("sysctl -n hw.optional.arm64", { encoding: "utf8" }).trim() === "1"
+  } catch (error) {
+    return false
   }
 }
