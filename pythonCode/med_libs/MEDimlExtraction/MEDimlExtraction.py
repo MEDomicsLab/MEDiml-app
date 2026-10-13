@@ -780,15 +780,17 @@ class MEDimlExtraction:
                 # Load csv and count scans
                 tabel_roi = pd.read_csv(path_csv)
 
-                # Filter out patients not present in the read path
-                if use_format == "nifti":
-                    all_files = list(path_read.rglob('*.nii*'))
+                # Filter out patients not present in the read path (same filter as the BatchExtractor)
+                if use_format == "dicom":
+                    # The DICOM datasets are organized as "path_read/PatientID/ImagingScanName".
+                    condition = lambda x: (path_read / f"{x['PatientID']}/{x['ImagingScanName']}").exists()
                 else:
-                    all_files = list(path_read.rglob('*.npy'))
-                tabel_roi = tabel_roi[tabel_roi.apply(
-                    lambda x: any(f"{x['PatientID']}__{x['ImagingScanName']}" in file.name for file in all_files),
-                    axis=1
-                )]
+                    if use_format == "nifti":
+                        all_files = list(path_read.rglob('*.nii*'))
+                    else:
+                        all_files = list(path_read.rglob('*.npy'))
+                    condition = lambda x: any(f"{x['PatientID']}__{x['ImagingScanName']}" in file.name for file in all_files)
+                tabel_roi = tabel_roi[tabel_roi.apply(condition, axis=1)]
 
                 # Count scans in path read
                 n_scans = len(tabel_roi['PatientID'].tolist())

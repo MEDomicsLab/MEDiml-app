@@ -458,6 +458,8 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
     // Simulate page refresh
     setRefreshEnabled(true)
     setProgress(0)
+    // Forget the scan count of the previous run until the new one is received
+    setNscans(0)
 
     // Make a POST request to the backend API
     requestBackend(
@@ -536,9 +538,10 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
       totalFiles = countFoldersInPath(saveFolder); // Replace with the actual total number of files
     }
 
-    // Calculate the progress
-    var newData = Math.round((totalFiles / nscans) * 100);
-    if (totalFiles === 0) {
+    // Calculate the progress, the number of scans is unknown (0) until the count request answers
+    // and old feature files from a previous run can outnumber the scans, so the progress is capped
+    var newData = nscans > 0 ? Math.min(Math.round((totalFiles / nscans) * 100), 100) : 0;
+    if (totalFiles === 0 || nscans <= 0) {
       setProgress(0);
       // setProgress({now: number, currentLabel: string})
     }
