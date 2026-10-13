@@ -218,11 +218,21 @@ jobs:
       # macOS no longer reports it as damaged, but users must allow it once in System Settings > Privacy & Security.
       #   MAC_CERTIFICATE_P12_BASE64 / MAC_CERTIFICATE_PASSWORD: "Developer ID Application" certificate (.p12, base64)
       #   APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID: Apple account used to notarize the app
+      # A secret that is not defined is an empty string, and electron-builder resolves an empty CSC_LINK to the
+      # project folder ("not a file" error), so the certificate variables are only exported when it is defined.
       - name: Build for Mac
-        run: npm run build:mac
+        run: |
+          if [ -n "$MAC_CERTIFICATE_P12_BASE64" ]; then
+            export CSC_LINK="$MAC_CERTIFICATE_P12_BASE64"
+            export CSC_KEY_PASSWORD="$MAC_CERTIFICATE_PASSWORD"
+          else
+            echo "No signing certificate defined, the app will be ad-hoc signed"
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          npm run build:mac
         env:
-          CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          MAC_CERTIFICATE_P12_BASE64: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
