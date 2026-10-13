@@ -97,7 +97,7 @@ const learningMEDimlDefaultSettings = {
       metric: "AUC_mean",
       extraMetrics: "Sensitivity_mean,Specificity_mean",
       pValues: true,
-      pValuesMethod: "delong",
+      pValuesMethod: "ttest",
       title: ""
     }
   }
