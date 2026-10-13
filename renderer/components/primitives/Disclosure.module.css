@@ -1,0 +1,78 @@
+/* Disclosure -- a collapsible group of rarely-changed parameters.
+   See Disclosure.jsx for why the modified-count is mandatory. */
+
+.disclosure {
+  border: 1px solid var(--med-border-subtle);
+  border-radius: var(--med-radius-md);
+  background-color: var(--med-surface-card);
+  margin-block: var(--med-card-gap);
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  gap: var(--med-space-2);
+  padding: calc(var(--med-space-3) * var(--med-density)) var(--med-card-padding);
+  cursor: pointer;
+  user-select: none;
+  font-size: var(--med-text-base);
+  font-weight: 600;
+  color: var(--med-text-primary);
+  list-style: none;
+  border-radius: var(--med-radius-md);
+}
+
+/* Hide the platform triangle; the caret below is drawn so it can be positioned
+   and rotated consistently across platforms. */
+.summary::-webkit-details-marker {
+  display: none;
+}
+
+.summary:hover {
+  background-color: var(--med-surface-sunken);
+}
+
+/* globals.css sets a blanket `:focus { outline: none }`, so the keyboard focus
+   ring has to be restored here or this control cannot be seen when tabbed to. */
+.summary:focus-visible {
+  outline: 2px solid var(--med-accent);
+  outline-offset: -2px;
+}
+
+.caret {
+  display: inline-flex;
+  transition: transform var(--med-duration-fast) var(--med-ease);
+  color: var(--med-text-secondary);
+  flex-shrink: 0;
+}
+
+.disclosure[open] > .summary > .caret {
+  transform: rotate(90deg);
+}
+
+/* The count of parameters inside that differ from their default.
+   Deliberately loud enough to read at a glance while collapsed. */
+.count {
+  margin-inline-start: var(--med-space-2);
+  font-size: var(--med-text-xs);
+  font-weight: 600;
+  color: var(--med-accent-contrast);
+  background-color: var(--med-status-info);
+  border-radius: var(--med-radius-pill);
+  padding: 0 var(--med-space-2);
+  white-space: nowrap;
+}
+
+/* Everything is at its default: state it, rather than showing nothing. An
+   absent badge is ambiguous between "all defaults" and "not computed". */
+.countNone {
+  margin-inline-start: var(--med-space-2);
+  font-size: var(--med-text-xs);
+  font-weight: 500;
+  color: var(--med-text-secondary);
+  white-space: nowrap;
+}
+
+.body {
+  padding: 0 var(--med-card-padding) var(--med-card-padding);
+}

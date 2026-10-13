@@ -1,0 +1,92 @@
+/* Field -- one labelled parameter. See Field.jsx. */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--med-field-gap);
+
+  /* Lets the field shrink inside a grid track. Without it a long Windows path
+     sets the column's minimum width and pushes the whole row wider. */
+  min-width: 0;
+}
+
+/* Base rules come before the .inline overrides below, so specificity ascends
+   down the file rather than descending. */
+.labelBlock {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--med-space-1) * var(--med-density));
+  min-width: 0;
+}
+
+.control {
+  min-width: 0;
+}
+
+/* Label and control side by side instead of stacked. For a single switch or a
+   short control the stacked layout spends three rows of height on one boolean,
+   which is most of why a card like "Use Workspace Data" looked so empty. */
+.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--med-space-3);
+  flex-wrap: wrap;
+}
+
+.inline > .labelBlock {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.inline > .control {
+  flex: 0 0 auto;
+}
+
+.labelRow {
+  display: flex;
+  align-items: center;
+  gap: var(--med-space-2);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.label {
+  font-size: var(--med-text-base);
+  font-weight: 600;
+  line-height: var(--med-leading-tight);
+  color: var(--med-text-primary);
+  margin: 0;
+}
+
+.disabled {
+  color: var(--med-text-disabled);
+}
+
+/* .badge, .infoToggle, .infoIcon, .infoPanel and .docLink moved to
+   Hint.module.css when SectionCard gained a row layout -- a card title needs the
+   same pill, and two copies would drift apart. See useHint.jsx. */
+
+/* The control should fill its grid track rather than shrink to its content. */
+.control > :global(.p-dropdown),
+.control > :global(.p-multiselect),
+.control > :global(.p-inputtext) {
+  width: 100%;
+}
+
+/* Selected file path / scan id. Truncated for layout, never destroyed: the
+   caller passes the full value as `title` so it stays readable and copyable.
+   Reproducibility depends on the exact path being recoverable. */
+.value {
+  font-family: var(--med-font-mono);
+  font-size: var(--med-text-xs);
+  color: var(--med-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0;
+}
+
+/* Numeric readouts align in columns so two runs can be compared down the page. */
+.numeric {
+  font-variant-numeric: tabular-nums;
+}

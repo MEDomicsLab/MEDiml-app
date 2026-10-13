@@ -2,7 +2,7 @@ import { app } from "electron"
 const fs = require("fs")
 var path = require("path")
 const util = require("util")
-const { execSync } = require("child_process")
+const { execSync, execFileSync, spawn } = require("child_process")
 const exec = util.promisify(require("child_process").exec)
 
 export function getPythonEnvironment(medCondaEnv = "med_conda_env") {
@@ -186,62 +186,81 @@ export function getBundledPythonEnvironment() {
   return pythonEnvironment
 }
 
-export async function installRequiredPythonPackages(mainWindow) {
-  let requirementsFileName = process.platform === "darwin" ? "requirements_mac.txt" : "requirements.txt"
-  if (process.env.NODE_ENV === "production") {
-    installPythonPackage(mainWindow, pythonExecutablePath, null, path.join(process.cwd(), "resources", "pythonEnv", requirementsFileName))
-  } else {
-    installPythonPackage(mainWindow, pythonExecutablePath, null, path.join(process.cwd(), "pythonEnv", requirementsFileName))
-  }
+export function getRequirementsFilePath() {
+  const requirementsFileName = process.platform === "darwin" ? "requirements_mac.txt" : "requirements.txt"
+  const pythonEnvDir = process.env.NODE_ENV === "production" ? path.join(process.resourcesPath, "pythonEnv") : path.join(process.cwd(), "pythonEnv")
+  return path.join(pythonEnvDir, requirementsFileName)
 }
 
-function comparePythonInstalledPackages(pythonPackages, requirements) {
-  let missingPackages = []
-  for (let i = 0; i < requirements.length; i++) {
-    let requirement = requirements[i]
-    let requirementParts = requirement.split("==")
-    let requirementName = requirementParts[0]
-    let requirementVersion = requirementParts[1]
-    let found = false
-    for (let j = 0; j < pythonPackages.length; j++) {
-      let pythonPackage = pythonPackages[j]
-      if (pythonPackage.name === requirementName && pythonPackage.version === requirementVersion) {
-        found = true
-        break
-      }
-    }
-    if (!found) {
-      missingPackages.push({ name: requirementName, version: requirementVersion })
-    }
-  }
-  console.log("Missing packages: " + JSON.stringify(missingPackages))
-  return missingPackages
+export async function installRequiredPythonPackages(mainWindow) {
+  await installPythonPackage(mainWindow, getBundledPythonEnvironment(), null, getRequirementsFilePath())
+}
+
+// Runs inside the target Python so specifiers (>=, <, ~=, markers) are evaluated by pip's own
+// packaging library, against the versions that interpreter actually sees.
+const MISSING_REQUIREMENTS_SNIPPET = `
+import json, sys
+from importlib import metadata
+try:
+    from packaging.requirements import Requirement
+except ImportError:
+    from pip._vendor.packaging.requirements import Requirement
+missing = []
+for line in open(sys.argv[1], encoding="utf-8"):
+    line = line.split("#")[0].strip()
+    if not line or line.startswith("-"):
+        continue
+    req = Requirement(line)
+    if req.marker is not None and not req.marker.evaluate():
+        continue
+    try:
+        installed = metadata.version(req.name)
+    except metadata.PackageNotFoundError:
+        installed = None
+    if installed is None or not req.specifier.contains(installed, prereleases=True):
+        missing.append({"requirement": line, "name": req.name, "installed": installed})
+print(json.dumps(missing))
+`
+
+/**
+ * @description Lists the requirements of `requirementsFilePath` that `pythonPath` does not satisfy.
+ * @returns {Array<{requirement: String, name: String, installed: String|null}>} `installed` is null when
+ *   the package is absent, else the installed version that fails the specifier.
+ */
+export function getMissingPythonRequirements(pythonPath = null, requirementsFilePath = null) {
+  pythonPath = pythonPath || getBundledPythonEnvironment()
+  requirementsFilePath = requirementsFilePath || getRequirementsFilePath()
+  const output = execFileSync(pythonPath, ["-c", MISSING_REQUIREMENTS_SNIPPET, requirementsFilePath], { encoding: "utf8" })
+  return JSON.parse(output.trim().split("\n").pop())
 }
 
 export function checkPythonRequirements(pythonPath = null, requirementsFilePath = null) {
-  let pythonRequirementsMet = false
-  if (pythonPath === null) {
-    // pythonPath = getPythonEnvironment()
-    pythonPath = getBundledPythonEnvironment()
+  try {
+    const missing = getMissingPythonRequirements(pythonPath, requirementsFilePath)
+    console.log("Missing python requirements: " + JSON.stringify(missing))
+    return missing.length === 0
+  } catch (error) {
+    console.warn("Could not check python requirements:", error)
+    return false
   }
-  if (requirementsFilePath === null) {
-    if (process.env.NODE_ENV === "production") {
-      requirementsFilePath = path.join(process.resourcesPath, "pythonEnv", "merged_requirements.txt")
-    } else {
-      requirementsFilePath = path.join(process.cwd(), "pythonEnv", "merged_requirements.txt")
-    }
-  }
-  let pythonPackages = getInstalledPythonPackages(pythonPath)
-  let requirements = fs.readFileSync(requirementsFilePath, "utf8").split("\n")
-  // # Remove empty lines and \r
-  requirements = requirements.filter((line) => line.trim() !== "")
-  requirements = requirements.map((line) => line.replace("\r", ""))
+}
 
-  let missingPackages = comparePythonInstalledPackages(pythonPackages, requirements)
-  if (missingPackages.length === 0) {
-    pythonRequirementsMet = true
-  }
-  return pythonRequirementsMet
+/**
+ * @description pip-installs `requirements` (specifier strings such as "pydantic<2") into `pythonPath`,
+ * streaming pip's output to the notification area.
+ * @returns {Promise<{success: Boolean, code: Number}>}
+ */
+export function installPythonRequirements(mainWindow, pythonPath, requirements) {
+  return new Promise((resolve) => {
+    // spawn, not exec: no shell, so "<"/">" in specifiers are not parsed as redirections.
+    const child = spawn(pythonPath, ["-m", "pip", "install", ...requirements])
+    execCallbacksForChildWithNotifications(child, "Python Package Installation", mainWindow)
+    child.on("error", (error) => {
+      console.error("pip install failed to start:", error)
+      resolve({ success: false, code: -1 })
+    })
+    child.on("close", (code) => resolve({ success: code === 0, code }))
+  })
 }
 
 export function getInstalledPythonPackages(pythonPath = null) {

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import MEDiml
+import numpy as np
 
 from ..context import LearningContext
 from ..node import LearningNode
@@ -36,13 +37,24 @@ class SplitNode(LearningNode):
         context.method = self.params["method"]
         context.holdout_test = context.method != "all_learn"
 
+        # The final model is trained on the study created by a previous run
+        if context.finalize_model:
+            if context.path_study is None or not Path(context.path_study).exists():
+                raise FileNotFoundError(f"Study folder {context.path_study} was not found. Run the experiment again before finalizing the model.")
+            return
 
         if not self.splitted_data:
-            path_study = MEDiml.learning.ml_utils.create_holdout_set(
+            # MEDiml's get_stratified_splits doesn't seed the random generator here: seed it so the
+            # holdout set is reproducible
+            np.random.seed(self.params.get("holdoutSeed", 1))
+            path_study =MEDiml.learning.ml_utils.create_holdout_set(
                 path_outcome_file=context.path_outcome_file,
                 path_save_experiments=context.path_save_experiments,
                 outcome_name=context.outcome_name,
                 method=context.method,
+                # Defaults of MEDiml's create_holdout_set
+                percentage=self.params.get("holdoutPercentage", 0.2),
+                seed=self.params.get("holdoutSeed", 1),
             )
             context.path_study = Path(path_study) if not isinstance(path_study, Path) else path_study
             self.path_study = context.path_study

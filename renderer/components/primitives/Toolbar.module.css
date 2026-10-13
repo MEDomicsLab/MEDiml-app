@@ -1,0 +1,36 @@
+/* Toolbar -- the action row at the end of a page. See Toolbar.jsx. */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--med-space-3);
+
+  /* Wraps instead of overflowing when the panel is narrow. The old markup put
+     each action in its own `<Col>`, which split the width evenly and pulled the
+     primary and secondary actions apart however much room there was. */
+  flex-wrap: wrap;
+
+  /* Centred. The toolbar is the page's terminal step, sitting under a stack of
+     symmetric full-width cards, so a centred group reads as the end of the form
+     rather than as another left-aligned row of content.
+
+     Note this makes Toolbar.Spacer (margin-inline-start: auto) meaningless --
+     using it would push the group left again. */
+  justify-content: center;
+
+  margin-block-start: var(--med-card-gap);
+  padding-block-start: var(--med-card-gap);
+  border-top: 1px solid var(--med-border-subtle);
+}
+
+/* Pushes everything after it to the far edge -- status text, a results link. */
+.spacer {
+  margin-inline-start: auto;
+}
+
+/* Run status beside the action rather than in a separate full-width row. */
+.status {
+  font-size: var(--med-text-sm);
+  color: var(--med-text-secondary);
+  font-variant-numeric: tabular-nums;
+}

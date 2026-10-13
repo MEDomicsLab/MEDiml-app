@@ -5,6 +5,8 @@ import { InputText } from 'primereact/inputtext';
 import { useState } from 'react';
 import { Form, Row } from "react-bootstrap";
 import Node from "../../flow/node";
+import Caption from '../../primitives/Caption'
+import { sectionCardClass } from '../../primitives/SectionCard'
 
 
 /**
@@ -40,14 +42,14 @@ const Analyze = ({ id, data, type }) => {
             {/* Show segmentation warning when there is no roisList or the roisList is empty */}
             {
               <Row 
-                className="form-group-box" 
+                className={sectionCardClass} 
                 style={{ maxHeight: "400px", overflowY: "auto", overflowX: "hidden", paddingRight: "8px" }}
               >
-              <Row className="form-group-box">
+              <Row className={sectionCardClass}>
                 {/* Analyze methods */}
                 <Form.Group controlId="analysisMeth" style={sectionStyle}>
                   <Form.Label className="analysisMeth">Analysis Methods</Form.Label>
-                  <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Select visualization techniques for analysis.</p>
+                  <Caption>Select visualization techniques for analysis.</Caption>
                     <div key={"HistogramMeth"} style={{display: 'flex', justifyContent:'flex-start'}}>
                       <Checkbox
                         onChange={(event) => {
@@ -98,7 +100,7 @@ const Analyze = ({ id, data, type }) => {
                 {/* P-value yes or no */}
                 <Form.Group controlId="findOptimalLvl" style={lastSectionStyle}>
                   <Form.Label className="findOptimalLvl">Find Optimal Level</Form.Label>
-                  <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Automatically determine optimal classification threshold.</p>
+                  <Caption>Automatically determine optimal classification threshold.</Caption>
                   <InputSwitch 
                     checked={data.internal.settings.optimalLevel}
                     onChange={(event) => {
@@ -112,10 +114,10 @@ const Analyze = ({ id, data, type }) => {
                 
               {/*Histogram method parameters*/}
               {(data.internal.settings.histogram) && (
-                <Row className="form-group-box">
+                <Row className={sectionCardClass}>
                   <Form.Group controlId="histPlotParams" style={lastSectionStyle}>
                     <Form.Label className="histPlotParams">Histogram Sort Option</Form.Label>
-                    <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Sort features by importance or frequency.</p>
+                    <Caption>Sort features by importance or frequency.</Caption>
                     <Dropdown 
                       style={{width: "200px"}}
                       value={data.setupParam.possibleSettings.defaultSettings.histParams.sortOption}
@@ -134,18 +136,18 @@ const Analyze = ({ id, data, type }) => {
 
               {/*Heatmap method parameters*/}
               {(data.internal.settings.heatmap) && (
-                <Row className="form-group-box">
+                <Row className={sectionCardClass}>
                   <Form.Group controlId="heatmapPlotParams" style={lastSectionStyle}>
                     <Form.Label className="heatmapPlotParams">Heatmap Options</Form.Label>
-                    <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
+                    <Caption>
                       Configure heatmap visualization settings.
-                    </p>
+                    </Caption>
                     {/* Main heatmap metric */}
                     <Form.Group controlId="mainMetric" style={sectionStyle}>
                       <Form.Label className="mainMetric">Main Heatmap Metric</Form.Label>
-                      <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
+                      <Caption>
                         Metric to display; use _mean for averaged values.
-                      </p>
+                      </Caption>
                       <InputText
                         style={{width: "270px", display: "block", margin: "0 auto"}}
                         value={data.setupParam.possibleSettings.defaultSettings.heatmapParams.metric}
@@ -164,7 +166,7 @@ const Analyze = ({ id, data, type }) => {
                           className="plotPvalues">
                               Plot p-values
                       </Form.Label>
-                      <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Display p-values on heatmap.</p>
+                      <Caption>Display p-values on heatmap.</Caption>
                       <InputSwitch 
                         checked={data.setupParam.possibleSettings.defaultSettings.heatmapParams.pValues}
                         onChange={(event) => {
@@ -179,7 +181,7 @@ const Analyze = ({ id, data, type }) => {
                     {(data.internal.settings.heatmapParams.pValues) && (
                       <Form.Group controlId="pValueMethod" style={sectionStyle}>
                         <Form.Label className="pValueMethod">P-value Method</Form.Label>
-                        <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Statistical test for p-value calculation.</p>
+                        <Caption>Statistical test for p-value calculation.</Caption>
                         <Dropdown
                             value={data.setupParam.possibleSettings.defaultSettings.heatmapParams.pValuesMethod}
                             options={[{ name: 'delong' }, { name: 'ttest' }, { name: 'wilcoxon' }, { name: 'bengio' }]}
@@ -201,7 +203,7 @@ const Analyze = ({ id, data, type }) => {
                       >
                         Extra metrics
                       </Form.Label>
-                      <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Additional metrics separated by commas with suffixes.</p>
+                      <Caption>Additional metrics separated by commas with suffixes.</Caption>
                       <InputText
                         style={{width: "270px", display: "block", margin: "0 auto"}}
                         value={data.setupParam.possibleSettings.defaultSettings.heatmapParams.extraMetrics}
@@ -217,7 +219,7 @@ const Analyze = ({ id, data, type }) => {
                     {/* Title */}
                     <Form.Group controlId="plotTitle" style={lastSectionStyle}>
                       <Form.Label className="plotTitle">Plot Title (Optional)</Form.Label>
-                      <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Custom title displayed on the heatmap plot.</p>
+                      <Caption>Custom title displayed on the heatmap plot.</Caption>
                       <InputText
                         style={{width: "270px", display: "block", margin: "0 auto"}}
                         value={data.setupParam.possibleSettings.defaultSettings.heatmapParams.title}

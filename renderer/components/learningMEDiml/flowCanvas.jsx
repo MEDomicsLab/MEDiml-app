@@ -1,14 +1,15 @@
+import { confirmDialog } from "primereact/confirmdialog"
 import { useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { flushSync } from "react-dom"
 import { toast } from "react-toastify"
 
 // Import utilities
 import uuid from "react-native-uuid"
-import { loadJsonSync, processBatchSettings } from "../../utilities/fileManagementUtils.js"
+import { downloadFile, loadJsonSync, processBatchSettings } from "../../utilities/fileManagementUtils.js"
 import { requestBackend } from "../../utilities/requests.js"
-import { getCollectionData } from "../dbComponents/utils.js"
 import { updateHasWarning } from "../flow/node.jsx"
 import ProgressBarRequests from "../generalPurpose/progressBarRequests.jsx"
-import { overwriteMEDDataObjectContent } from "../mongoDB/mongoDBUtils.js"
+import { getCollectionData, overwriteMEDDataObjectContent } from "../mongoDB/mongoDBUtils.js"
 
 
 // Workflow imports
@@ -20,7 +21,7 @@ import WorkflowBase from "../flow/workflowBase.jsx"
 import { ErrorRequestContext } from "../generalPurpose/errorRequestContext.jsx"
 import { PageInfosContext } from "../mainPages/moduleBasics/pageInfosContext.jsx"
 import { MEDDataObject } from "../workspace/NewMedDataObject.js"
-import { DataContext } from "../workspace/dataContext.jsx"
+import { useMEDDataStore } from "../workspace/useMEDData.js"
 import { WorkspaceContext } from "../workspace/workspaceContext.jsx"
 
 // Import node types
@@ -32,6 +33,7 @@ import FeatureReduction from "./nodes/FeatureReduction.jsx"
 import Normalization from "./nodes/Normalization.jsx"
 import RadiomicsLearner from "./nodes/RadiomicsLearner.jsx"
 import Split from "./nodes/Split.jsx"
+import BoxNode from "./nodes/boxNode.jsx"
 
 // Import node parameters
 import nodesParams from "../../public/setupVariables/allNodesParams.jsx"
@@ -46,6 +48,182 @@ import { deepCopy } from "../../utilities/staticFunctions.js"
 import { useRef } from "react"
 
 const staticNodesParams = nodesParams // represents static nodes parameters
+
+// Identifies the .json files exported by the learning module, to be shared between MEDiml users
+const SCENE_FILE_FORMAT = "mediml-learning-scene"
+const SCENE_FILE_VERSION = 1
+
+// Key of a node in nodesParams.learningMEDiml, as used by updateScene to restore its setupParam
+const getSetupParamKey = (node) => node.name?.toLowerCase().replaceAll(" ", "_").replaceAll("-", "_")
+
+/**
+ * @param {Object} node node of a loaded, imported or default scene (its setupParam is not saved)
+ * @description
+ * Restores the setupParam of the node. The nodes display setupParam.possibleSettings.defaultSettings but save and
+ * run with internal.settings: both are the same object for a new node (see addSpecificToNode), and must be again
+ * for a loaded node. Otherwise the node displays the default settings while it keeps, saves and runs its own ones.
+ * The settings missing from the node (e.g. added since the scene was saved) take their default value.
+ */
+const restoreSetupParam = (node) => {
+  const setupParam = deepCopy(staticNodesParams.learningMEDiml[getSetupParamKey(node)])
+  node.data.setupParam = setupParam
+  const defaultSettings = setupParam?.possibleSettings?.defaultSettings
+  if (!defaultSettings || !node.data.internal) return
+  node.data.internal.settings = mergeSettings(defaultSettings, node.data.internal.settings)
+}
+
+/**
+ * @param {Object} target settings receiving the values (modified in place)
+ * @param {Object} source settings whose values are kept
+ * @returns {Object} target, with the values of source merged into its nested objects (arrays are replaced)
+ */
+const mergeSettings = (target, source) => {
+  const isPlainObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value)
+  Object.entries(source || {}).forEach(([key, value]) => {
+    target[key] = isPlainObject(value) && isPlainObject(target[key]) ? mergeSettings(target[key], value) : value
+  })
+  return target
+}
+
+// Guiding boxes added to every scene: each node must be placed inside the box of its section
+// (see section in learningMEDimlNodesParams). The Analyze node is the analysis step, it has no box.
+const GUIDING_BOXES = [
+  { id: "box-initialization", name: "Initialization", section: "initialization", position: { x: 0, y: 0 }, size: { width: 800, height: 600 } },
+  { id: "box-training", name: "Training", section: "machine learning", position: { x: 850, y: 0 }, size: { width: 1200, height: 600 } }
+]
+const ANALYZE_NODE_POSITION = { x: 2100, y: 250 } // default position of the Analyze node, right of the Training box
+const BOX_SIDEBAR_WIDTH = 60 // width of the box's label sidebar, nodes cannot be placed over it (see nodes/boxNode.jsx)
+const BOX_COLORS = {
+  valid: { borderColor: "rgba(173, 230, 150, 0.8)", selectedBorderColor: "rgb(255, 187, 0)" },
+  invalid: { borderColor: "rgba(255, 0, 0, 0.8)", selectedBorderColor: "rgb(255, 0, 0)" }
+}
+
+const isBoxNode = (node) => node.type === "boxNode"
+
+const createBoxNode = ({ id, name, position, size }) => ({
+  id,
+  type: "boxNode",
+  name,
+  position: { ...position },
+  draggable: false, // the nodes inside a box do not follow it
+  deletable: false,
+  selectable: true, // selecting the box shows its resizer
+  zIndex: -1001, // the box is displayed under the nodes, even when selected (reactflow adds 1000 to the zIndex of selected nodes)
+  data: {
+    id,
+    size,
+    internal: { name, type: "box", subflowId: "MAIN", hasWarning: { state: false }, ...BOX_COLORS.valid }
+  }
+})
+
+const getNodeRect = (node) => ({
+  x: node.position.x,
+  y: node.position.y,
+  width: node.width ?? node.data.size?.width ?? 0,
+  height: node.height ?? node.data.size?.height ?? 0
+})
+
+const rectsIntersect = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+
+const isInsideBox = (rect, box) =>
+  rect.x >= box.x + BOX_SIDEBAR_WIDTH && rect.x + rect.width <= box.x + box.width && rect.y >= box.y && rect.y + rect.height <= box.y + box.height
+
+/**
+ * @param {Array} nodes nodes of the scene
+ * @returns {{invalidBoxIds: Set<String>, misplacedNodes: Array<{node: Object, box: Object}>}}
+ * the boxes containing a node of another section, and the nodes that are not fully inside the box of their section
+ */
+const getPlacementErrors = (nodes) => {
+  const boxes = nodes.filter(isBoxNode)
+  const invalidBoxIds = new Set()
+  const misplacedNodes = []
+  nodes.forEach((node) => {
+    if (isBoxNode(node) || node.hidden) return
+    const rect = getNodeRect(node)
+    const sectionBoxId = GUIDING_BOXES.find((box) => box.section === node.data.setupParam?.section?.toLowerCase())?.id
+    const sectionBox = boxes.find((box) => box.id === sectionBoxId)
+    boxes.forEach((box) => {
+      if (box !== sectionBox && rectsIntersect(rect, getNodeRect(box))) invalidBoxIds.add(box.id)
+    })
+    if (sectionBox && !isInsideBox(rect, getNodeRect(sectionBox))) misplacedNodes.push({ node, box: sectionBox })
+  })
+  return { invalidBoxIds, misplacedNodes }
+}
+
+/**
+ * @param {Array} nodes nodes of the scene
+ * @returns {Array} the nodes with the boxes colored red if they contain a wrong node, and the misplaced nodes
+ * flagged with the "misplaced" class. The same array is returned if nothing changed.
+ */
+const applyPlacementErrors = (nodes) => {
+  const { invalidBoxIds, misplacedNodes } = getPlacementErrors(nodes)
+  const misplacedIds = new Set(misplacedNodes.map(({ node }) => node.id))
+  let hasChanged = false
+  const newNodes = nodes.map((node) => {
+    if (isBoxNode(node)) {
+      const colors = invalidBoxIds.has(node.id) ? BOX_COLORS.invalid : BOX_COLORS.valid
+      if (node.data.internal.borderColor === colors.borderColor) return node
+      hasChanged = true
+      return { ...node, data: { ...node.data, internal: { ...node.data.internal, ...colors } } }
+    }
+    const className = misplacedIds.has(node.id) ? "misplaced" : ""
+    if ((node.className || "") === className) return node
+    hasChanged = true
+    return { ...node, className }
+  })
+  return hasChanged ? newNodes : nodes
+}
+
+/**
+ * @returns {Promise<{name: String, content: Object}|null>} the selected .json file and its parsed content, null if cancelled
+ * @description Opens a file dialog to select a .json file. Rejects if the file is not valid JSON.
+ */
+const pickJsonFile = () => {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.accept = ".json,application/json"
+    input.addEventListener("cancel", () => resolve(null))
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return resolve(null)
+      try {
+        resolve({ name: file.name, content: JSON.parse(await file.text()) })
+      } catch (error) {
+        reject(new Error(`${file.name} is not a valid JSON file`))
+      }
+    }
+    input.click()
+  })
+}
+
+/**
+ * @param {Object} json content of an exported scene file, or of a scene's metadata.json
+ * @returns {Object} the scene ({ nodes, edges, viewport }) to load in the learning module
+ * @description Throws an error with a message for the user if the file is not a learning scene
+ */
+const parseSceneFile = (json) => {
+  if (json?.format !== undefined && json.format !== SCENE_FILE_FORMAT) {
+    throw new Error("This file is not a MEDiml learning scene")
+  }
+  // A raw metadata.json holds the scene itself, sometimes wrapped in an array
+  let scene = json?.format === SCENE_FILE_FORMAT ? json.scene : json
+  if (Array.isArray(scene)) scene = scene[0]
+  if (!scene || !Array.isArray(scene.nodes) || !Array.isArray(scene.edges)) {
+    throw new Error("This file is not a MEDiml learning scene: nodes or edges are missing")
+  }
+  const unknownNodes = scene.nodes.filter((node) => !isBoxNode(node) && (!node.data?.internal || !staticNodesParams.learningMEDiml[getSetupParamKey(node)]))
+  if (unknownNodes.length > 0) {
+    const names = [...new Set(unknownNodes.map((node) => node.name || node.type || node.id))].join(", ")
+    throw new Error(`This scene contains nodes the learning module does not support (${names}). Extraction scenes can only be imported in the extraction module.`)
+  }
+  const nodeIds = new Set(scene.nodes.map((node) => node.id))
+  if (scene.edges.some((edge) => !nodeIds.has(edge.source) || !nodeIds.has(edge.target))) {
+    throw new Error("This scene is corrupted: some connections link to missing nodes")
+  }
+  scene.viewport = scene.viewport || { x: 0, y: 0, zoom: 1 }
+  return scene
+}
 
 /**
  * @param {String} id id of the workflow for multiple workflows management
@@ -64,6 +242,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
   const { setViewport } = useReactFlow() // setViewport is used to update the viewport of the workflow
   const [treeData, setTreeData] = useState({}) // treeData is used to set the data of the tree menu
   const [isProgressUpdating, setIsProgressUpdating] = useState(false) // progress is used to store the progress of the workflow execution
+  const [isRunning, setIsRunning] = useState(false) // true while the experiment's process runs, the run button is then replaced by the stop button
   const [progress, setProgress] = useState({
     now: 0,
     currentLabel: ""
@@ -75,7 +254,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
   const { setIsResults, isResults, setShowResultsPane, updateFlowResults } = useContext(FlowResultsContext)
   const { canRun, setSceneName } = useContext(FlowInfosContext) // used to get the flow infos
   const { groupNodeId, changeSubFlow, updateNode } = useContext(FlowFunctionsContext)
-  const { globalData } = useContext(DataContext)
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
   const { port } = useContext(WorkspaceContext)
   const { setError, setShowError } = useContext(ErrorRequestContext) // used to get the flow infos
   const op = useRef(null);
@@ -135,7 +314,8 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
       Normalization: Normalization,
       FeatureReduction: FeatureReduction,
       RadiomicsLearner: RadiomicsLearner,
-      Analyze: Analyze
+      Analyze: Analyze,
+      boxNode: BoxNode
     }),
     []
   )
@@ -144,6 +324,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
   useEffect(() => {
     async function getConfig() {
       // Get Config file
+      const globalData = medDataStore.snapshot()
       if (globalData[pageId]?.childrenIDs) {
         let configToLoad = MEDDataObject.getChildIDWithName(globalData, pageId, "metadata.json")
         setMetadataFileID(configToLoad)
@@ -168,6 +349,28 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
     setTreeData(createTreeFromNodes())
     checkDuplicateExperiments(nodes)
   }, [nodes, edges])
+
+  // Adds the guiding boxes and the Analyze node to the scene when they are missing (new, cleared or older scenes)
+  useEffect(() => {
+    const hasDefaults = (nds) => GUIDING_BOXES.every((box) => nds.some((node) => node.id === box.id)) && nds.some((node) => node.type === "Analyze")
+    if (hasDefaults(nodes)) return
+    setNodes((nds) => {
+      if (hasDefaults(nds)) return nds
+      const defaultNodes = GUIDING_BOXES.filter((box) => !nds.some((node) => node.id === box.id)).map(createBoxNode)
+      if (!nds.some((node) => node.type === "Analyze")) defaultNodes.push(createAnalyzeNode())
+      // the boxes are placed first so they are rendered under the nodes
+      return [...defaultNodes, ...nds]
+    })
+  }, [nodes])
+
+  // Checks the placement of the nodes in the guiding boxes upon every scene update (node added, dragged, deleted, scene loaded...)
+  useEffect(() => {
+    setNodes(applyPlacementErrors)
+  }, [nodes])
+
+  // Nodes outside the box of their section, or boxes containing a node of another section, prevent the experiment from running
+  const placementErrors = useMemo(() => getPlacementErrors(nodes), [nodes])
+  const hasPlacementErrors = placementErrors.invalidBoxIds.size > 0 || placementErrors.misplacedNodes.length > 0
 
   // Hook executed upon modification of groupNodeId to show the current workflow
   useEffect(() => {
@@ -323,6 +526,33 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
     return newNode
   }
 
+  /**
+   * @returns {Object} a new Analyze node, placed right of the Training box
+   *
+   * @description
+   * The Analyze node is the analysis step of every experiment, so it is always on the scene
+   */
+  const createAnalyzeNode = () => {
+    const { title, img } = staticNodesParams.learningMEDiml.analyze
+    const analyzeNode = {
+      id: `node_${uuid.v4()}`,
+      type: "Analyze",
+      name: title,
+      position: { ...ANALYZE_NODE_POSITION },
+      data: {
+        internal: {
+          name: title,
+          img: img,
+          type: title.toLowerCase(),
+          results: { checked: false, contextChecked: false },
+          hasRun: false
+        },
+        tooltipBy: "node"
+      }
+    }
+    return addSpecificToNode(analyzeNode)
+  }
+
   // Check if there are duplicate model nodes and show a warning if there are
   const checkDuplicateExperiments = (nodes) => {
     const expNodes = nodes.filter((node) => node.type === "Design")
@@ -402,6 +632,10 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
   const deleteNode = useCallback(
     (id) => {
       console.log("Deleting node ", id)
+      if (nodes.find((node) => node.id === id)?.type === "Analyze") {
+        toast.warn("The Analyze node cannot be deleted, it is the analysis step of the experiment")
+        return
+      }
 
       setNodes((nds) =>
         nds.reduce((filteredNodes, n) => {
@@ -448,7 +682,8 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
       console.log("The current React Flow instance is : ")
       console.log(flow)
 
-      flow.nodes.forEach((node) => {
+      // The guiding boxes are only visual, they are not sent to the backend
+      flow.nodes.filter((node) => !isBoxNode(node)).forEach((node) => {
         const nodeID = node.id
 
         // If the node is a features node
@@ -731,10 +966,53 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
   }, [isProgressUpdating]); // The empty dependency array ensures this effect runs only once when the component mounts*/
 
   /**
+   * @param {Object} finalProgress progress displayed once the run is over
+   *
+   * @description
+   * Returns the scene to its normal state once a run is over (finished, failed or stopped):
+   * stops the progress bar, makes the edges dull and unfreezes the nodes
+   */
+  const resetRunState = (finalProgress) => {
+    setIsRunning(false)
+    setIsProgressUpdating(false)
+    setProgress(finalProgress)
+    // Make all edges dull
+    setEdges((prevEdges) =>
+      prevEdges.map((edge) => ({
+        ...edge,
+        animated: false,
+        selectable: true
+      }))
+    )
+    // Unfreeze all nodes, the guiding boxes stay in place
+    setNodes((prevNodes) =>
+      prevNodes.map((node) => ({
+        ...node,
+        draggable: !isBoxNode(node),
+        selectable: true,
+        connectable: true
+      }))
+    )
+  }
+
+  /**
    * @description
    * Runs all the pipelines in the workflow
    */
   const onRun = useCallback(() => {
+    // Check if all nodes are in place
+    const { invalidBoxIds, misplacedNodes } = getPlacementErrors(nodes)
+    if (misplacedNodes.length > 0) {
+      const { node, box } = misplacedNodes[0]
+      toast.error(`Node "${node.data.internal.name}" is misplaced. Please place it inside the "${box.name}" box.`)
+      return
+    }
+    if (invalidBoxIds.size > 0) {
+      const boxNames = nodes.filter((node) => invalidBoxIds.has(node.id)).map((node) => `"${node.name}"`).join(", ")
+      toast.error(`The ${boxNames} box contains a node that does not belong to it. Please move it to its designated box.`)
+      return
+    }
+
     let experimentsTemp = []
     let resultsFolders = []
     let nSplitsTemp = []
@@ -830,13 +1108,20 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
         connectable: false
       }))
     )
-    
+
+    setIsRunning(true)
     requestBackend(
       port,
       "/learning_MEDiml/run_all/" + pageId,
       newFlow,
       (response) => {
         console.log("received results:", response)
+        // The experiment was stopped by the user (see onStop): the previous results are kept
+        if (response.cancelled) {
+          resetRunState({ now: 0, currentLabel: "" })
+          toast.info("Experiment stopped")
+          return
+        }
         if (response.warning){
           toast.warn(response.warning)
         }
@@ -845,28 +1130,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
           toast.success("Experiment executed successfully")
           setShowError(false)
           //updateFlowResults(response)
-          setIsProgressUpdating(false)
-          setProgress({
-            now: 100,
-            currentLabel: "Done!"
-          })
-          // Make all edges dull
-          setEdges((prevEdges) =>
-            prevEdges.map((edge) => ({
-              ...edge,
-              animated: false,
-              selectable: true
-            }))
-          )
-          // Unfreeze all nodes
-          setNodes((prevNodes) =>
-            prevNodes.map((node) => ({
-              ...node,
-              draggable: true,
-              selectable: true,
-              connectable: true
-            }))
-          )
+          resetRunState({ now: 100, currentLabel: "Done!" })
           setIsResults(true)
           setNodes((prevNodes) =>
             prevNodes.map((node) => {
@@ -900,28 +1164,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
             })
           )
         } else {
-          setIsProgressUpdating(false)
-          setProgress({
-            now: 0,
-            currentLabel: ""
-          })
-          // Make all edges dull
-          setEdges((prevEdges) =>
-            prevEdges.map((edge) => ({
-              ...edge,
-              animated: false,
-              selectable: true
-            }))
-          )
-          // Unfreeze all nodes
-          setNodes((prevNodes) =>
-            prevNodes.map((node) => ({
-              ...node,
-              draggable: true,
-              selectable: true,
-              connectable: true
-            }))
-          )
+          resetRunState({ now: 0, currentLabel: "" })
           if (typeof response.error === "string") {
             toast.error(response.error)
             console.log("error", response.error)
@@ -943,34 +1186,36 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
         }
       },
       (error) => {
-        setIsProgressUpdating(false)
-        setProgress({
-          now: 0,
-          currentLabel: ""
-        })
-        // Make all edges dull
-        setEdges((prevEdges) =>
-          prevEdges.map((edge) => ({
-            ...edge,
-            animated: false,
-            selectable: true
-          }))
-        )
-        // Unfreeze all nodes
-        setNodes((prevNodes) =>
-          prevNodes.map((node) => ({
-            ...node,
-            draggable: true,
-            selectable: true,
-            connectable: true
-          }))
-        )
+        resetRunState({ now: 0, currentLabel: "" })
         toast.error("Error detected while running the experiment", error)
         console.log("error detected", error)
         setError(error)
       }
     )
   }, [nodes, edges, reactFlowInstance])
+
+  /**
+   * @description
+   * Stops the running experiment (its Python process and the processes it started). The run request
+   * is then answered as cancelled, which returns the scene to its normal state (see onRun)
+   */
+  const onStop = () => {
+    if (!confirm("Stop the experiment?\nThe results of the unfinished splits will be lost.")) return
+    requestBackend(
+      port,
+      "/stop/" + pageId,
+      {},
+      (response) => {
+        if (!response.stopped) {
+          toast.info("The experiment is not running anymore")
+        }
+      },
+      (error) => {
+        toast.error("Error detected while stopping the experiment", error)
+        console.error("Error detected while stopping the experiment", error)
+      }
+    )
+  }
 
   /**
    * @description
@@ -1046,23 +1291,7 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
           console.log("loaded flow", flow)
 
           // TODO : should have conditions regarding json file used for import!
-          // For each nodes in the json file, add the specific parameters
-          Object.values(flow.nodes).forEach((node) => {
-            // the line below is important because functions are not serializable
-            // set workflow type
-            let subworkflowType = node.data.internal.subflowId != "MAIN" ? "learningMEDiml" : "learningMEDiml"
-            // set node type
-            let setupParams = deepCopy(nodesParams[subworkflowType][node.name.toLowerCase().replaceAll(" ", "_").replaceAll("-", "_")])
-            console.log("setupParams", setupParams)
-            node.data.setupParam = setupParams
-          })
-
-          if (flow) {
-            const { x = 0, y = 0, zoom = 1 } = flow.viewport
-            setNodes(flow.nodes || [])
-            setEdges(flow.edges || [])
-            setViewport({ x, y, zoom })
-          }
+          updateScene(flow)
         } catch (error) {
           toast.warn("Error loading file : ", error)
         }
@@ -1088,27 +1317,11 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
       // If the user confirms, load the json file
       const restoreFlow = async () => {
         try {
-          const flow = require("../../public/setupVariables/possibleSettings/learningMEDiml/learningMEDimlDefaultWorkflow.json")
+          // Copied, so the edits of the scene do not change the default workflow loaded the next time
+          const flow = deepCopy(require("../../public/setupVariables/possibleSettings/learningMEDiml/learningMEDimlDefaultWorkflow.json"))
           console.log("loaded flow", flow)
 
-          // TODO : should have conditions regarding json file used for import!
-          // For each nodes in the json file, add the specific parameters
-          Object.values(flow.nodes).forEach((node) => {
-            // the line below is important because functions are not serializable
-            // set workflow type
-            let subworkflowType = node.data.internal.subflowId != "MAIN" ? "learningMEDiml" : "learningMEDiml"
-            // set node type
-            let setupParams = deepCopy(nodesParams[subworkflowType][node.name.toLowerCase().replaceAll(" ", "_").replaceAll("-", "_")])
-            console.log("setupParams", setupParams)
-            node.data.setupParam = setupParams
-          })
-
-          if (flow) {
-            const { x = 0, y = 0, zoom = 1 } = flow.viewport
-            setNodes(flow.nodes || [])
-            setEdges(flow.edges || [])
-            setViewport({ x, y, zoom })
-          }
+          updateScene(flow)
         } catch (error) {
           toast.warn("Error loading file : ", error)
         }
@@ -1130,13 +1343,14 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
       // For each nodes in the json file, add the specific parameters
       Object.values(newScene.nodes).forEach((node) => {
         // the line below is important because functions are not serializable
-        // set workflow type and get default parameters
-        let subworkflowType = node.data.internal.subflowId != "MAIN" ? "learningMEDiml" : "learningMEDiml"
-        let setupParams = deepCopy(nodesParams[subworkflowType][node.name.toLowerCase().replaceAll(" ", "_").replaceAll("-", "_")])
-        node.data.setupParam = setupParams
+        restoreSetupParam(node)
         updateHasWarning(node.data)
       })
-      const { x = 0, y = 0, zoom = 1 } = newScene.viewport
+      // Empties the canvas first, so the node components are created again for the new scene: a node keeping
+      // the id of a node of the previous scene would otherwise keep the state of its component (e.g. selected
+      // folders) and skip its initialization, displaying the previous settings while saving the new ones
+      flushSync(() => setNodes([]))
+      const { x = 0, y = 0, zoom = 1 } = newScene.viewport || {}
       setNodes(newScene.nodes || [])
       setEdges(newScene.edges || [])
       setViewport({ x, y, zoom })
@@ -1164,6 +1378,84 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
     // Warn the user if there is no workflow to save
     toast.warn("No workflow to export!")
   }}, [reactFlowInstance, nodes])
+
+  /**
+   * @description
+   * Export the scene as a .json file that other MEDiml users can import
+   */
+  const onExportScene = useCallback(() => {
+    if (!reactFlowInstance || nodes.length === 0) {
+      toast.warn("No scene to export!")
+      return
+    }
+    const flow = deepCopy(reactFlowInstance.toObject())
+    flow.nodes.forEach((node) => {
+      // setupParam is restored from nodesParams on import
+      node.data.setupParam = null
+      node.data.enableView = false
+      // The results point to files on this computer, they are not shared
+      delete node.data.internal?.results
+      // Interaction flags set while the experiment runs (see onRun), the guiding boxes are never draggable
+      if (!isBoxNode(node)) delete node.draggable
+      delete node.selectable
+      delete node.connectable
+      delete node.selected
+    })
+    flow.edges.forEach((edge) => {
+      delete edge.animated
+      delete edge.selectable
+      delete edge.selected
+    })
+    const sceneName = medDataStore.snapshot()[pageId]?.name?.split(".mediml")[0] || "scene"
+    downloadFile(
+      { format: SCENE_FILE_FORMAT, version: SCENE_FILE_VERSION, sceneName, exportedAt: new Date().toISOString(), scene: flow },
+      `${sceneName}.mediml.json`
+    )
+  }, [reactFlowInstance, nodes, pageId])
+
+  /**
+   * @description
+   * Replace the scene with one imported from a .json file exported by another MEDiml user
+   */
+  const onImportScene = useCallback(async () => {
+    let file
+    try {
+      file = await pickJsonFile()
+    } catch (error) {
+      toast.error(error.message)
+      return
+    }
+    if (!file) return
+
+    let scene
+    try {
+      scene = parseSceneFile(file.content)
+    } catch (error) {
+      toast.error(error.message)
+      return
+    }
+    const loadScene = () => {
+      updateScene(scene)
+      // Imported scenes come without results
+      setIsResults(false)
+      setShowResultsPane(false)
+      toast.success(`Scene imported from ${file.name}. Save the scene to keep it.`)
+    }
+    if (nodes.length === 0) {
+      loadScene()
+      return
+    }
+    // In-page dialog rather than the native confirm(): on Windows, a native confirm() opened right after
+    // the file dialog closes leaves the page without keyboard focus, so no input accepts typing anymore
+    confirmDialog({
+      message: `Importing ${file.name} will replace the current scene. Unsaved changes will be lost.`,
+      header: "Import Scene",
+      icon: "pi pi-exclamation-triangle",
+      acceptLabel: "Import",
+      rejectLabel: "Cancel",
+      accept: loadScene
+    })
+  }, [nodes])
 
   /**
    * @description
@@ -1244,9 +1536,11 @@ const FlowCanvas = ({ workflowType, setWorkflowType }) => {
               <>
                 <BtnDiv
                   buttonsList={[
-                    { type: "run", onClick: onRun, disabled: !canRun },
+                    isRunning ? { type: "stop", onClick: onStop } : { type: "run", onClick: onRun, disabled: !canRun || hasPlacementErrors },
                     { type: "clear", onClick: onClear },
                     { type: "save", onClick: onSave },
+                    { type: "exportScene", onClick: onExportScene },
+                    { type: "importScene", onClick: onImportScene, disabled: isRunning },
                   ]}
                   op={op}
                 />

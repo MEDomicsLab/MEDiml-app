@@ -1,0 +1,266 @@
+/* =========================================================================
+   MEDiml-app design tokens
+   =========================================================================
+
+   The single source of truth for colour, spacing, type, elevation and motion.
+   Imported first in renderer/pages/_app.js, before every vendor stylesheet.
+
+   NAMING: every token is prefixed `--med-`. This is not decoration. The app
+   loads ten vendor stylesheets which between them already own the `--bs-`
+   (1175 tokens), `--rct-`, `--color-`, `--toastify-`, `--contexify-`,
+   `--surface-` and `--primary-` namespaces. `--med-` is the only prefix none
+   of them uses, and it matches the one token this project already had
+   (`--med-shadow`).
+
+   ADDING A TOKEN: semantic names only -- `--med-surface-card`, never
+   `--med-white`. Literal names get reused for the wrong thing and then block
+   theming.
+
+   ADOPTION STATUS: defining a custom property changes nothing until something
+   references it, so this file is inert on arrival. Raw values are migrated to
+   these tokens file-by-file, with review, in Phases 4-5. Where a token's value
+   is marked "canonical", it was chosen to equal the value already dominant in
+   the codebase, so that migration is a byte-identical no-op rather than a
+   silent redesign.
+   ========================================================================= */
+
+:root {
+  /* -----------------------------------------------------------------------
+     TYPE
+     Anchored to what the app actually renders today: base 14px on a 16px root,
+     so --med-text-base is a no-op swap. The stack is PrimeReact's, reproduced
+     verbatim -- until now the app inherited it by accident (see --med-font-family
+     below); naming it here means the app finally owns its own typography.
+     ----------------------------------------------------------------------- */
+  --med-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  --med-font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", "SF Mono", Menlo, Consolas, monospace;
+
+  /* 1.2 ratio. --med-text-sm is 13px: the size of the 70 copy-pasted
+     italic helper paragraphs that Phase 4 replaces with one <Caption>. */
+  --med-text-xs: 0.75rem;     /* 12px - units, metadata */
+  --med-text-sm: 0.8125rem;   /* 13px - captions, help text        (canonical) */
+  --med-text-base: 0.875rem;  /* 14px - UI default                 (canonical) */
+  --med-text-lg: 1rem;        /* 16px - section headings           (canonical) */
+  --med-text-xl: 1.25rem;     /* 20px */
+  --med-text-2xl: 1.5rem;     /* 24px */
+
+  --med-leading-tight: 1.3;
+  --med-leading-body: 1.55;
+
+  /* Caps line length on large displays. The app currently has no such limit,
+     which is why help text reaches 200+ characters per line at 4K. */
+  --med-measure: 68ch;
+
+  /* -----------------------------------------------------------------------
+     SPACE
+     4px base, 8px rhythm. Replaces the 31 distinct px values currently in use.
+     ----------------------------------------------------------------------- */
+  --med-space-1: 0.25rem;  /*  4px */
+  --med-space-2: 0.5rem;   /*  8px */
+  --med-space-3: 0.75rem;  /* 12px */
+  --med-space-4: 1rem;     /* 16px */
+  --med-space-5: 1.5rem;   /* 24px */
+  --med-space-6: 2rem;     /* 32px */
+  --med-space-8: 3rem;     /* 48px */
+
+  /* -----------------------------------------------------------------------
+     COLOUR
+     Semantic roles, not literal names. Values are the dominant existing ones
+     so that most migrations are exact; the near-duplicate greys they replace
+     (#3a3a3a, #414141, #444, #d3d3d3, #ccc, #aaaaaa ...) are consolidated
+     onto these during the per-page migration, with review.
+     ----------------------------------------------------------------------- */
+
+  /* Surfaces */
+  --med-surface-page: #eeeeee;      /* most-used background, 31 uses  (canonical) */
+  --med-surface-card: #ffffff;      /*                                 (canonical) */
+  --med-surface-sunken: #dfdfdf;    /*                                 (canonical) */
+  --med-surface-inverse: #353535;   /* dark chrome: sidebars, headers  (canonical) */
+  --med-surface-inverse-raised: #414141;
+
+  /* Text. --med-text-primary is the colour the app renders today, which it
+     inherits from Blueprint's stylesheet rather than declaring anywhere.
+     Contrast ratios below are measured, not estimated. */
+  --med-text-primary: #1c2127;      /* 16.2:1 on card, 14.5:1 on page   (canonical) */
+  --med-text-secondary: #5b6470;    /* 6.0:1 on card, 5.2:1 on page -- AA, not AAA */
+  --med-text-disabled: #8a929e;     /* 3.1:1 -- below AA, which WCAG 1.4.3 permits
+                                       only because it marks a DISABLED control.
+                                       Never use it for merely secondary text. */
+  --med-text-inverse: #dfdfdf;      /* 9.2:1 on --med-surface-inverse   (canonical) */
+
+  /* Borders */
+  --med-border-subtle: #d3d3d3;     /*                                 (canonical) */
+  --med-border-strong: #aaaaaa;     /*                                 (canonical) */
+
+  /* Accent. Matches the PrimeReact lara-light-indigo primary already in use, so
+     buttons and links do not shift when they adopt the token.
+
+     CAUTION: 4.47:1 on white. That clears the 3:1 required for UI components
+     and focus rings, and it is fine as a button FILL with white text on it, but
+     it misses the 4.5:1 needed for small text -- so do not use it as a link or
+     label colour on a light surface. Use --med-status-info (7.3:1) there.
+     Inherited from the vendor theme, so changing it is a Phase 7 decision. */
+  --med-accent: #6366f1;            /*                                 (canonical) */
+  --med-accent-contrast: #ffffff;
+
+  /* Status. Never the only signal -- always pair with an icon or text.
+     Roughly 8% of males have a red/green deficiency, and this is a clinical
+     tool where a missed warning has consequences. */
+  --med-status-ok: #15803d;
+  --med-status-warn: #b45309;
+  --med-status-error: #b91c1c;
+  --med-status-info: #095899;       /*                                 (canonical) */
+
+  /* -----------------------------------------------------------------------
+     RADIUS
+     ----------------------------------------------------------------------- */
+  --med-radius-sm: 4px;
+  --med-radius-md: 8px;
+  --med-radius-lg: 12px;
+  --med-radius-pill: 999px;
+
+  /* -----------------------------------------------------------------------
+     ELEVATION
+     Three steps, used sparingly. Before Phase 5 every .form-group-box row
+     carried the same shadow, so elevation signalled nothing and a page read as
+     a stack of equally important cards. Reserve --med-elev-2 for the one
+     primary surface.
+     ----------------------------------------------------------------------- */
+  --med-elev-0: none;
+  --med-elev-1: 0 1px 2px rgb(16 24 40 / 6%);
+  --med-elev-2: 0 2px 5px rgb(0 0 0 / 20%);   /* the existing card shadow (canonical) */
+  --med-elev-3: 0 4px 12px rgb(16 24 40 / 8%);
+
+  /* -----------------------------------------------------------------------
+     MOTION
+     ----------------------------------------------------------------------- */
+  --med-duration-fast: 120ms;
+  --med-duration-base: 200ms;
+  --med-ease: cubic-bezier(0.2, 0, 0.13, 1.5);
+
+  /* -----------------------------------------------------------------------
+     DENSITY
+
+     ONE FIXED DIAL, tuned in review -- not a runtime preference. Every spacing
+     token below is derived from it, so this single number sets how tight the
+     whole interface is.
+
+     Less white space is the preferred reading of this application: a researcher
+     comparing extraction settings wants as many of them on screen at once as
+     possible, and these pages are a list of parameters to scan rather than
+     prose to read. It scales SPACING ONLY -- never font size, never hit
+     targets -- so denser never means less readable or harder to click.
+
+     There was briefly a Comfortable/Compact control; it was removed because the
+     choice was noise. Reinstating one means adding back a
+     `:root[data-density="comfortable"] { --med-density: 1 }` block and a
+     control to set the attribute; nothing else here would change.
+     ----------------------------------------------------------------------- */
+  --med-density: 0.625;
+
+  --med-row-gap: calc(var(--med-space-4) * var(--med-density));
+  --med-field-gap: calc(var(--med-space-2) * var(--med-density));
+  --med-card-padding: calc(var(--med-space-5) * var(--med-density));
+  --med-card-gap: calc(var(--med-space-4) * var(--med-density));
+  --med-caption-gap: calc(var(--med-space-2) * var(--med-density));
+
+  /* -----------------------------------------------------------------------
+     LAYOUT
+     Minimum column width before <ParamGrid> drops to fewer columns. Lower
+     bound 15rem (240px) keeps a dropdown plus its label usable; upper bound
+     20rem (320px) stops columns growing into 1250px-wide controls at 4K.
+     Overridable per row via the component's `min` prop.
+     ----------------------------------------------------------------------- */
+  --med-paramgrid-min: clamp(15rem, 22vw, 20rem);
+
+  /* Width of a <SectionCard row>'s title column.
+
+     FIXED -- not a clamp(), not a vw expression. The whole point of this token
+     is that every card's controls begin at the same x, so the page reads as one
+     aligned column of inputs. A viewport-relative width would shift with the
+     WINDOW while the flexlayout panel the page is docked in stayed the same
+     size: the exact trap ParamGrid.jsx documents.
+
+     16rem fits the longest title in use ("Prescribed dose column name") on one
+     line at 14px, and still leaves ~15rem for a control before the row wraps. */
+  --med-card-title-col: 16rem;
+
+  /* -----------------------------------------------------------------------
+     RE-HOMED
+     The only two custom properties this project already had. Same names, same
+     values, moved here so every token lives in one file.
+     ----------------------------------------------------------------------- */
+  --sidebar-width: 3rem;
+  --med-shadow: 2px 2px 3px -1px rgb(0 0 0 / 20%), 0 1px 1px 0 rgb(0 0 0 / 14%), 0px 0px 3px 2px rgb(0 0 0 / 12%);
+
+  /* NOTE: --font-family is deliberately NOT defined here.
+     It is PrimeReact's variable, and PrimeReact's theme declares it on :root
+     too. Since the theme is imported after this file, a definition here loses
+     and the alias only looks like it works -- the computed stacks happen to
+     match, so nothing visibly breaks while the app in fact owns nothing.
+     The reassignment lives in customPrimeReact.css, which is imported after the
+     theme. App code should reference --med-font-sans directly. */
+}
+
+/* ---------------------------------------------------------------------------
+   DARK THEME -- OPT-IN ONLY, deliberately not wired to prefers-color-scheme.
+
+   This block is activated solely by an explicit `data-theme="dark"` on <html>.
+   It is NOT behind `@media (prefers-color-scheme: dark)`, and that omission is
+   intentional.
+
+   The app ships PrimeReact's lara-light-indigo theme plus Bootstrap's light
+   defaults. Neither responds to the OS setting. If these tokens auto-flipped on
+   a dark-mode machine, then the moment any component adopted --med-surface-card
+   in Phase 4 that one component would render dark inside an otherwise light UI.
+   That failure would appear only for developers and users whose OS happens to be
+   in dark mode, which makes it exactly the kind of bug that escapes review.
+   (Verified concretely: on this machine the tokens did resolve to their dark
+   values while every vendor stylesheet stayed light.)
+
+   Dark mode becomes real in Phase 7, when the vendor themes are switched over
+   at the same time. At that point add the prefers-color-scheme block back with
+   a `:root:not([data-theme="light"])` guard so an explicit in-app light setting
+   still wins.
+
+   Note: Electron 21 is Chromium 106, so `light-dark()` (Chromium 123) is not
+   available here.
+   --------------------------------------------------------------------------- */
+:root[data-theme="dark"] {
+  --med-surface-page: #161616;
+  --med-surface-card: #1e1e1e;
+  --med-surface-sunken: #141414;
+  --med-surface-inverse: #dfdfdf;
+  --med-surface-inverse-raised: #eeeeee;
+
+  --med-text-primary: #e8eaed;
+  --med-text-secondary: #a4adba;
+  --med-text-disabled: #6d7682;
+  --med-text-inverse: #1c2127;
+
+  --med-border-subtle: #333944;
+  --med-border-strong: #4a515c;
+
+  --med-accent: #8b8cf5;
+
+  --med-status-ok: #4ade80;
+  --med-status-warn: #fbbf24;
+  --med-status-error: #f87171;
+  --med-status-info: #60a5fa;
+}
+
+/* ---------------------------------------------------------------------------
+   Respect the OS reduced-motion setting. This is a real accessibility fix, not
+   a token, but it belongs at the foundation layer. It only ever shortens
+   animations, so it cannot change a static layout.
+   --------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

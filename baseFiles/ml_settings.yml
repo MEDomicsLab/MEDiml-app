@@ -107,7 +107,7 @@ modeling:
   method: "rf"
   optimization_metric: "AUC"
   cv_folds: 5
-  var_importance_threshold: 0.05
+  n_features_to_select: 5
   optimize_threshold: True
   useGPU: True
   nameSave: "rf_5perc_CECT"

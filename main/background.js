@@ -12,14 +12,22 @@ import {
   installPythonPackage,
   installBundledPythonExecutable,
   checkPythonRequirements,
-  installRequiredPythonPackages
+  installRequiredPythonPackages,
+  getMissingPythonRequirements,
+  installPythonRequirements
 } from "./utils/pythonEnv"
 import { installMongoDB, checkRequirements } from "./utils/installation"
+import { startWorkspaceWatcher, stopWorkspaceWatcher } from "./utils/workspaceWatcher"
 const fs = require("fs")
 var path = require("path")
 let mongoProcess = null
 const dirTree = require("directory-tree")
+// The embedded MongoDB instance writes its data files under .mediml/MongoDBdata inside the
+// workspace, so a workspace scan must not walk into it (it would ship the DB's own storage
+// files over IPC and needlessly slow every scan as the DB grows).
+const WORKSPACE_SCAN_EXCLUDES = [/[\\/]\.mediml([\\/]|$)/, /[\\/]node_modules([\\/]|$)/, /[\\/]\.git([\\/]|$)/]
 const { exec, spawn, execSync } = require("child_process")
+const net = require("net")
 let serverProcess = null
 const serverState = { serverIsRunning: false }
 var serverPort = MEDconfig.defaultPort
@@ -240,8 +248,21 @@ if (isProd) {
       }
       // Start MongoDB with the new configuration
       startMongoDB(data, mongoProcess)
+      // Watch the new workspace for changes made outside the app (an external editor, a script,
+      // a git checkout, ...) and ask the renderer to refresh when they happen.
+      startWorkspaceWatcher(
+        data,
+        () => {
+          mainWindow?.webContents.send("updateDirectory", {
+            workingDirectory: dirTree(app.getPath("sessionData"), { exclude: WORKSPACE_SCAN_EXCLUDES }),
+            hasBeenSet: hasBeenSet,
+            newPort: serverPort
+          })
+        },
+        WORKSPACE_SCAN_EXCLUDES
+      )
       return {
-        workingDirectory: dirTree(app.getPath("sessionData")),
+        workingDirectory: dirTree(app.getPath("sessionData"), { exclude: WORKSPACE_SCAN_EXCLUDES }),
         hasBeenSet: hasBeenSet,
         newPort: serverPort
       }
@@ -411,18 +432,21 @@ if (isProd) {
     } else if (data === "getRecentWorkspaces") {
       let recentWorkspaces = loadWorkspaces()
       event.reply("recentWorkspaces", recentWorkspaces)
-    } else if (data === "updateWorkingDirectory") {
-      event.reply("updateDirectory", {
-        workingDirectory: dirTree(app.getPath("sessionData")),
-        hasBeenSet: hasBeenSet,
-        newPort: serverPort
-      }) // Sends the folder structure to Next.js
     } else if (data === "getServerPort") {
       event.reply("getServerPort", {
         newPort: serverPort
       }) // Sends the folder structure to Next.js
     } else if (data === "requestAppExit") {
       app.exit()
+    } else if (data === "updateWorkingDirectory") {
+      // Explicit full rescan (sidebar Refresh button) - same payload the workspace watcher sends.
+      if (hasBeenSet) {
+        event.reply("updateDirectory", {
+          workingDirectory: dirTree(app.getPath("sessionData"), { exclude: WORKSPACE_SCAN_EXCLUDES }),
+          hasBeenSet: hasBeenSet,
+          newPort: serverPort
+        })
+      }
     }
   })
 
@@ -495,6 +519,16 @@ ipcMain.handle("checkPythonRequirements", async (event) => {
   return checkPythonRequirements()
 })
 
+// Throws (rejecting the renderer's invoke) if the interpreter can't run, so the UI can tell
+// "could not check" apart from "nothing missing".
+ipcMain.handle("getMissingPythonRequirements", async (event, pythonPath) => {
+  return getMissingPythonRequirements(pythonPath)
+})
+
+ipcMain.handle("installMissingPythonRequirements", async (event, pythonPath, requirements) => {
+  return installPythonRequirements(mainWindow, pythonPath, requirements)
+})
+
 ipcMain.handle("checkMongoDBisInstalled", async (event) => {
   return getMongoDBPath()
 })
@@ -525,6 +559,13 @@ app.on("before-quit", async (event) => {
     terminalManager.cleanup()
   }
   
+  // Stop the workspace filesystem watcher
+  try {
+    await stopWorkspaceWatcher()
+  } catch (error) {
+    console.warn("Error stopping workspace watcher:", error)
+  }
+
   // Stop MongoDB
   try {
     await stopMongoDB(mongoProcess)
@@ -546,19 +587,49 @@ app.on("before-quit", async (event) => {
   app.quit()
 })
 
-ipcMain.handle("checkMongoIsRunning", async (event) => {
-  // Check if something is running on the port MEDconfig.mongoPort
-  let port = MEDconfig.mongoPort
-  let isRunning = false
-  if (process.platform === "win32") {
-    isRunning = exec(`netstat -ano | findstr :${port}`).toString().trim() !== ""
-  } else if (process.platform === "darwin") {
-    isRunning = exec(`lsof -i :${port}`).toString().trim() !== ""
-  } else {
-    isRunning = exec(`netstat -tuln | grep ${port}`).toString().trim() !== ""
-  }
+/**
+ * @param {Number} port port to check
+ * @returns {Promise<Boolean>} true if a server accepts connections on the port, on 127.0.0.1 or ::1 as the MongoDB client does
+ */
+function isPortAccepting(port) {
+  const tryHost = (host) =>
+    new Promise((resolve) => {
+      const socket = net.connect({ port, host })
+      const done = (result) => {
+        socket.destroy()
+        resolve(result)
+      }
+      socket.setTimeout(1000, () => done(false))
+      socket.once("connect", () => done(true))
+      socket.once("error", () => done(false))
+    })
+  return tryHost("127.0.0.1").then((accepting) => accepting || tryHost("::1"))
+}
 
-  return isRunning
+ipcMain.handle("checkMongoIsRunning", async (event) => {
+  // MongoDB is running only if it accepts connections on its port (a process or a stale connection using the port is not enough)
+  return isPortAccepting(MEDconfig.mongoPort)
+})
+
+ipcMain.handle("restartMongoDB", async (event) => {
+  // Restarts the MongoDB server of the workspace, used when the connection is refused although the server seems running
+  if (!hasBeenSet) return false
+  // Wait for the previous server to exit so the new one can lock the database files
+  if (mongoProcess && mongoProcess.exitCode === null) {
+    const exited = new Promise((resolve) => {
+      mongoProcess.once("exit", resolve)
+      setTimeout(resolve, 10000)
+    })
+    mongoProcess.kill()
+    await exited
+  }
+  startMongoDB(app.getPath("sessionData"))
+  // Wait for the new server to accept connections
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (await isPortAccepting(MEDconfig.mongoPort)) return true
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+  }
+  return false
 })
 
 app.on("window-all-closed", () => {

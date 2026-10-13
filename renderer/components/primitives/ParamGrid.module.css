@@ -1,0 +1,91 @@
+/* ParamGrid -- the responsive row primitive for parameter forms.
+   See ParamGrid.jsx for the rationale behind intrinsic sizing. */
+
+.grid {
+  display: grid;
+
+  /* The whole responsive story, in one line and with no breakpoints.
+     Columns are sized to the AVAILABLE WIDTH -- the width of the flexlayout
+     panel the page is docked in, not the viewport. That distinction matters: a
+     panel can be 420px wide on a 4K monitor, and a viewport media query would
+     confidently report "extra large" and lay out three columns inside it.
+
+     `auto-fill`, NOT `auto-fit`. The two differ only when there are fewer items
+     than tracks, which is the normal case here -- a row of three parameters on
+     a 3840px display has room for eleven. auto-fit COLLAPSES the empty tracks,
+     so those three fields would share the full width and grow to ~1250px each:
+     precisely the "controls stretched across a 4K monitor" problem this grid
+     exists to fix. auto-fill keeps the empty tracks, so a control stays within
+     its 15-20rem band at every width and the row simply fills from the left.
+
+     `min(..., 100%)` stops a single column from overflowing when the panel is
+     narrower than the minimum track size. Without it, `minmax(15rem, 1fr)`
+     forces a 15rem column into a 12rem panel and the content is clipped. */
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--med-paramgrid-min), 100%), 1fr));
+  gap: var(--med-row-gap);
+
+  /* Fields have different heights (some carry a caption, some do not). Without
+     this they stretch to match the tallest, which pushes controls apart and
+     breaks the horizontal reading line across a row. */
+  align-items: start;
+}
+
+/* Grid items must be allowed to shrink below their content's intrinsic width,
+   or a long unbroken value -- a Windows file path, an ROI name -- sets the
+   column's minimum and forces the whole grid wider than its panel. */
+.grid > * {
+  min-width: 0;
+}
+
+/* A row's label and help text were direct children of the old `<Row>`. Left
+   alone inside a grid each would claim a column and sit BESIDE the first
+   control rather than above the row. Spanning them keeps the reading order
+   intact without having to wrap every one by hand during the migration.
+   `<ParamGrid.Header>` does the same thing explicitly where the grouping is
+   worth making visible in the markup. */
+.grid > label,
+.grid > p,
+.grid > h6 {
+  grid-column: 1 / -1;
+}
+
+/* Explicit version of the rule above. */
+.header {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--med-space-1);
+  min-width: 0;
+}
+
+/* A field that should always occupy the full row regardless of column count --
+   a progress bar, a warning, an action bar. */
+.full {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+/* Cap line length for prose inside a parameter row. <Caption> now sets its own
+   measure, so this is a safety net for any paragraph that is not a Caption --
+   without it such prose runs past 200 characters per line at 3840px, against a
+   readable measure of 45-75. */
+.grid p {
+  max-width: var(--med-measure);
+}
+
+/* Numeric output aligns in columns. Digits in the default proportional figures
+   drift, which makes two extraction runs genuinely harder to compare. */
+.numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Filesystem paths, scan IDs and modality codes. Monospace makes them scannable;
+   the truncation is safe because the full value stays available via `title`. */
+.path {
+  font-family: var(--med-font-mono);
+  font-size: var(--med-text-xs);
+  color: var(--med-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

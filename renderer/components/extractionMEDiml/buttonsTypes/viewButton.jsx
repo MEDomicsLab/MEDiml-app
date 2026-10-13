@@ -30,7 +30,7 @@ const ViewButton = ({ id, data, type }) => {
 
     // Construction of form data to send to /extraction_MEDiml/view. If the node is input, the name of the file is needed
     let formData
-    if (data.internal.settings.hasOwnProperty("filepath")) {
+    if (data.internal.settings?.hasOwnProperty("filepath")) { // nodes without parameters (ex: ROI extraction) have no settings
       formData = {
         id: id,
         name: type,

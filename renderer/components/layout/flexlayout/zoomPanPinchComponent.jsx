@@ -2,7 +2,7 @@
 import React from "react"
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch"
 import { Button } from "react-bootstrap"
-import { ZoomIn, ZoomOut, ArrowClockwise } from "react-bootstrap-icons"
+import { RotateCw as ArrowClockwise, ZoomIn, ZoomOut } from "lucide-react"
 const nativeImage = require("electron").nativeImage
 
 /**
@@ -33,14 +33,18 @@ const ZoomPanPinchComponent = ({ imagePath, options = undefined, image, height, 
       {({ zoomIn, zoomOut, resetTransform, ...rest }) => (
         <React.Fragment>
           <div className="tools">
-            <Button onClick={() => zoomIn()}>
-              <ZoomIn />
+            {/* aria-label on each: these are icon-only controls, so without it
+                a screen reader announces "button" with no indication of what it
+                does. A magnifier glyph is one of the few that is genuinely
+                universal, which is why icon-only is acceptable here at all. */}
+            <Button onClick={() => zoomIn()} aria-label="Zoom in">
+              <ZoomIn aria-hidden="true" />
             </Button>
-            <Button onClick={() => zoomOut()}>
-              <ZoomOut />
+            <Button onClick={() => zoomOut()} aria-label="Zoom out">
+              <ZoomOut aria-hidden="true" />
             </Button>
-            <Button onClick={() => resetTransform()}>
-              <ArrowClockwise />
+            <Button onClick={() => resetTransform()} aria-label="Reset zoom">
+              <ArrowClockwise aria-hidden="true" />
             </Button>
           </div>
           <TransformComponent>

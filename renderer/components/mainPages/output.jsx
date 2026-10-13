@@ -4,13 +4,13 @@ import useInterval from "@khalidalansi/use-interval"
 import ModulePage from "./moduleBasics/modulePage"
 import { requestBackend } from "../../utilities/requests"
 import { WorkspaceContext } from "../workspace/workspaceContext"
-import { DataContext } from "../workspace/dataContext"
+import { useMEDDataObject } from "../workspace/useMEDData"
 import { SelectButton } from "primereact/selectbutton"
 import { Card } from "primereact/card"
 import { ProgressBar } from "primereact/progressbar"
 import { Tooltip } from "primereact/tooltip"
 import MEDconfig from "../../../medomics.dev"
-import { IoClose } from "react-icons/io5"
+import { X as IoClose } from "lucide-react"
 import { PageInfosContext } from "./moduleBasics/pageInfosContext"
 import { InputNumber } from "primereact/inputnumber"
 
@@ -20,53 +20,51 @@ import { InputNumber } from "primereact/inputnumber"
  * @returns the active element card
  */
 const ActiveElement = ({ activeElement }) => {
-  const { globalData } = useContext(DataContext)
+  const medObject = useMEDDataObject(activeElement.id) // re-renders only when THIS object changes
   const [metadata, setMetadata] = useState(undefined)
   const { port } = useContext(WorkspaceContext) // we get the port for server connexion
   const { pageId } = useContext(PageInfosContext) // we get the pageId to send to the server
 
   // handle updating the metadata of the active element when it changes
   useEffect(() => {
-    if (globalData) {
-      if (activeElement.id in globalData) {
-        let element = globalData[activeElement.id]
-        if (!("activities" in element)) {
-          element.activities = []
-        }
-        let isActivityAlreadyIn = false
-        element.activities.forEach((activity) => {
-          if (activity["id"] == activeElement["id"]) {
-            isActivityAlreadyIn = true
-          }
-        })
-        !isActivityAlreadyIn && element.activities.push(activeElement)
-        let metadata = {
-          name: element.name,
-          lastModified: element.lastModified,
-          activities: element.activities,
-          id: element.id,
-          urlId: activeElement.urlId,
-          absPath: element.path,
-          pid: activeElement.pid,
-          processState: activeElement.ProcessState,
-          progress: activeElement.progress,
-          isProgress: activeElement.progress != ""
-        }
-        setMetadata(metadata)
-      } else {
-        let metadata = {
-          name: activeElement.id,
-          urlId: activeElement.urlId,
-          pid: activeElement.pid,
-          processState: activeElement.ProcessState,
-          progress: activeElement.progress,
-          isProgress: activeElement.progress != ""
-        }
-        setMetadata(metadata)
-        // toast.error("No element with id: " + activeElement.id + " in globalData")
+    if (medObject) {
+      let element = medObject
+      if (!("activities" in element)) {
+        element.activities = []
       }
+      let isActivityAlreadyIn = false
+      element.activities.forEach((activity) => {
+        if (activity["id"] == activeElement["id"]) {
+          isActivityAlreadyIn = true
+        }
+      })
+      !isActivityAlreadyIn && element.activities.push(activeElement)
+      let metadata = {
+        name: element.name,
+        lastModified: element.lastModified,
+        activities: element.activities,
+        id: element.id,
+        urlId: activeElement.urlId,
+        absPath: element.path,
+        pid: activeElement.pid,
+        processState: activeElement.ProcessState,
+        progress: activeElement.progress,
+        isProgress: activeElement.progress != ""
+      }
+      setMetadata(metadata)
+    } else {
+      let metadata = {
+        name: activeElement.id,
+        urlId: activeElement.urlId,
+        pid: activeElement.pid,
+        processState: activeElement.ProcessState,
+        progress: activeElement.progress,
+        isProgress: activeElement.progress != ""
+      }
+      setMetadata(metadata)
+      // toast.error("No element with id: " + activeElement.id + " in globalData")
     }
-  }, [activeElement, globalData])
+  }, [activeElement, medObject])
 
   /**
    *
@@ -151,7 +149,14 @@ const ActiveElement = ({ activeElement }) => {
           title={
             <>
               {metadata.name}
+              {/* TODO(a11y): this is an <svg> with an onClick, so it is not
+                  focusable and cannot be activated from the keyboard. The label
+                  below at least gives it an accessible name; making it operable
+                  means wrapping it in a real <button>, which changes this
+                  card's layout and belongs in its own change. */}
               <IoClose
+                role="button"
+                aria-label="Close output"
                 className="btn-close-output-card"
                 onClick={() => {
                   let topic = "removeId/" + metadata.urlId

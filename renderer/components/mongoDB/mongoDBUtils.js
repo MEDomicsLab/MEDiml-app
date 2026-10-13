@@ -1,14 +1,9 @@
 /* eslint-disable no-unused-vars, no-case-declarations, camelcase */
-import { toast } from "react-toastify"
+import { toast } from "react-toastify";
+import { getDb, resetConnection } from "../workspace/data/MongoConnection";
 
-const { MongoClient } = require("mongodb")
 const fs = require("fs")
 const Papa = require("papaparse")
-
-const uri = "mongodb://localhost:54017" // Remplacez par votre URI MongoDB
-const dbName = "data" // Remplacez par le nom de votre base de données
-
-let client
 
 /**
  * @description Establish a connection to MongoDB data database
@@ -21,12 +16,12 @@ function stripIds(doc = {}) {
 }
 
 export async function connectToMongoDB() {
-  if (!client) {
-    client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true })
-    await client.connect()
-  }
-  return client.db(dbName)
+  return getDb()
 }
+
+// Re-exported so callers that need to force a reconnect (e.g. after switching workspaces) don't
+// need to import MongoConnection.js directly.
+export { resetConnection };
 
 /**
  * @description Update the name of a MEDDataObject specified by id in the DB
@@ -37,7 +32,7 @@ export async function connectToMongoDB() {
 export async function updateMEDDataObjectName(id, newName) {
   const db = await connectToMongoDB()
   const result = await db.collection("medDataObjects").updateOne({ id: id }, { $set: { name: newName } })
-  return result.modifiedCount > 0
+  return result.matchedCount > 0
 }
 
 /**
@@ -54,7 +49,7 @@ export async function updateMEDDataObjectType(id, newType) {
     return false
   }
   const result = await db.collection("medDataObjects").updateOne({ id: id }, { $set: { type: newType } })
-  return result.modifiedCount > 0
+  return result.matchedCount > 0
 }
 
 /**
@@ -66,7 +61,7 @@ export async function updateMEDDataObjectType(id, newType) {
 export async function updateMEDDataObjectUsedInList(id, usedIn) {
   const db = await connectToMongoDB()
   const result = await db.collection("medDataObjects").updateOne({ id: id }, { $set: { usedIn: usedIn } })
-  return result.modifiedCount > 0
+  return result.matchedCount > 0
 }
 
 /**
@@ -78,7 +73,7 @@ export async function updateMEDDataObjectUsedInList(id, usedIn) {
 export async function updateMEDDataObjectPath(id, newPath) {
   const db = await connectToMongoDB()
   const result = await db.collection("medDataObjects").updateOne({ id: id }, { $set: { path: newPath } })
-  return result.modifiedCount > 0
+  return result.matchedCount > 0
 }
 
 /**
@@ -103,24 +98,6 @@ export async function insertMEDDataObjectIfNotExists(medData, path = null, jsonD
     }
     if (!medData.type || typeof medData.type !== 'string' || medData.type.trim() === '') {
       throw new Error('medData.type is required and must be a non-empty string', medData)
-    }
-
-    // Skip npy, DICOM, and NIfTI files
-    if (medData.type === "npy" || 
-      (path && path.endsWith(".npy")) || 
-      (path && path.endsWith(".dcm")) || 
-      (path && path.endsWith(".nii")) || 
-      (path && path.endsWith(".nii.gz"))
-    ) {
-      console.log(
-        `Skipping file: ${medData.name}` +
-        (medData.type
-          ? ` of type ${medData.type}`
-          : path
-            ? ` at path ${path}`
-            : '')
-      )
-      return null
     }
 
     const db = await connectToMongoDB()
@@ -175,36 +152,16 @@ export async function insertMEDDataObjectIfNotExists(medData, path = null, jsonD
       throw new Error(`Failed to insert MEDDataObject: ${err.message}`)
     }
 
-    // Add the id of the inserted object to the childrenIDs of its parent
+    // Add the id of the inserted object to the childrenIDs of its parent. $addToSet is a single,
+    // atomic, indexed-by-id update - no more re-fetching every sibling and re-sorting the whole
+    // array on each insert (an O(k) read-modify-write per insert, O(k^2) per directory of k
+    // children). Display order is handled at render time by reorderArrayOfFoldersAndFiles
+    // (directoryTree/utils.js), so childrenIDs no longer needs to be stored pre-sorted.
     let parentUpdated = false
     if (medData.parentID) {
       try {
-        const parent = await collection.findOne({ id: medData.parentID })
-        if (parent) {
-          let children = parent.childrenIDs || []
-
-          // Check if the child is already in the parent's childrenIDs
-          if (!children.includes(medData.id)) {
-            // Fetch the actual child objects to sort them
-            const childrenObjects = await collection.find({ id: { $in: children } }).toArray()
-            childrenObjects.push(medData)
-
-            // Sort the children objects first by type (directories first) and then alphabetically by name
-            childrenObjects.sort((a, b) => {
-              if (a.type === b.type) {
-                return a.name.localeCompare(b.name)
-              }
-              return a.type === "directory" ? -1 : 1
-            })
-
-            // Extract the sorted ids
-            children = childrenObjects.map((child) => child.id)
-
-            // Update the parent with the sorted children ids
-            await collection.updateOne({ id: medData.parentID }, { $set: { childrenIDs: children } })
-            parentUpdated = true
-          }
-        }
+        const updateResult = await collection.updateOne({ id: medData.parentID }, { $addToSet: { childrenIDs: medData.id } })
+        parentUpdated = updateResult.matchedCount > 0
       } catch (err) {
         console.error(`Error updating parent ${medData.parentID} childrenIDs:`, err)
         // Non-fatal error, continue but log
@@ -221,53 +178,8 @@ export async function insertMEDDataObjectIfNotExists(medData, path = null, jsonD
           console.log(`Data inserted with ${result.insertedCount} documents`)
         }
       } else if (path) {
-        switch (medData.type) {
-          case "csv":
-            await insertCSVIntoCollection(path, medData.id)
-            break
-          case "html":
-            await insertHTMLIntoCollection(path, medData.id)
-            break
-          case "png":
-            await insertPNGIntoCollection(path, medData.id)
-            break
-          case "pkl":
-            await insertPKLIntoCollection(path, medData.id)
-            break
-          case "jpg":
-            await insertJPGIntoCollection(path, medData.id)
-            break
-          case "json":
-            // Check if file exists
-            const fs = require('fs').promises
-            try {
-              await fs.access(path)
-            } catch (err) {
-              console.error(`File at path ${path} does not exist or is not accessible:`, err)
-              throw new Error(`File not found: ${path}`)
-            }
-            
-            const fileContent = await fs.readFile(path, "utf8")
-            let jsonContent
-            try {
-              jsonContent = JSON.parse(fileContent)
-            } catch (err) {
-              console.error(`Error parsing JSON from ${path}:`, err)
-              throw new Error(`Invalid JSON in file: ${path}`)
-            }
-            
-            const dataCollection = db.collection(medData.id)
-            const docsToInsert = Array.isArray(jsonContent) ? jsonContent : [jsonContent]
-            const result = await dataCollection.insertMany(docsToInsert)
-            if (result.insertedCount === 0) {
-              console.error(`No JSON data inserted for MEDDataObject with id ${medData.id}`)
-              throw new Error(`Failed to insert JSON data for ${medData.id}`)
-            }
-            console.log(`Inserted ${result.insertedCount} JSON documents from file`)
-            break
-          default:
-            console.log(`No handler for type: ${medData.type}`)
-            break
+        if (await insertFileContent(path, medData.id, medData.type)) {
+          await recordContentMtime(medData.id, path)
         }
       } else if (copyId) {
         // Copy the data from the collection of the object being copied
@@ -320,6 +232,97 @@ export async function insertMEDDataObjectIfNotExists(medData, path = null, jsonD
     console.error(`Fatal error in insertMEDDataObjectIfNotExists:`, err)
     throw err
   }
+}
+
+/**
+ * @description Parses the file at `filePath` into the content collection named `id`, by type.
+ * @returns {Promise<Boolean>} false when the type has no content handler (nothing imported)
+ */
+async function insertFileContent(filePath, id, type) {
+  switch (type) {
+    case "csv":
+      await insertCSVIntoCollection(filePath, id)
+      return true
+    case "html":
+      await insertHTMLIntoCollection(filePath, id)
+      return true
+    case "png":
+      await insertPNGIntoCollection(filePath, id)
+      return true
+    case "pkl":
+      await insertPKLIntoCollection(filePath, id)
+      return true
+    case "jpg":
+      await insertJPGIntoCollection(filePath, id)
+      return true
+    case "json": {
+      let jsonContent
+      try {
+        jsonContent = JSON.parse(await fs.promises.readFile(filePath, "utf8"))
+      } catch (err) {
+        console.error(`Error reading JSON from ${filePath}:`, err)
+        throw new Error(`Invalid or unreadable JSON file: ${filePath}`)
+      }
+      const docsToInsert = Array.isArray(jsonContent) ? jsonContent : [jsonContent]
+      const db = await connectToMongoDB()
+      const result = await db.collection(id).insertMany(docsToInsert)
+      if (result.insertedCount === 0) {
+        throw new Error(`Failed to insert JSON data for ${id}`)
+      }
+      console.log(`Inserted ${result.insertedCount} JSON documents from file`)
+      return true
+    }
+    default:
+      console.log(`No handler for type: ${type}`)
+      return false
+  }
+}
+
+// The file's mtime at import time, so a later open can tell the collection is older than the file.
+async function recordContentMtime(id, filePath) {
+  const db = await connectToMongoDB()
+  await db.collection("medDataObjects").updateOne({ id }, { $set: { contentMtime: fs.statSync(filePath).mtimeMs } })
+}
+
+async function dropCollectionIfExists(id) {
+  const db = await connectToMongoDB()
+  if ((await db.listCollections({ name: id }).toArray()).length > 0) {
+    await db.collection(id).drop()
+  }
+}
+
+/**
+ * @description Imports a workspace file's content into MongoDB if it has no content collection yet
+ * (files that reach the workspace outside the dropzone are only synced as metadata).
+ * @returns {Promise<{imported: Boolean}>}
+ */
+export async function ensureContentCollection(id, filePath, type) {
+  if (await collectionExists(id)) return { imported: false }
+  try {
+    const imported = await insertFileContent(filePath, id, type)
+    if (imported) await recordContentMtime(id, filePath)
+    return { imported }
+  } catch (err) {
+    await dropCollectionIfExists(id).catch((dropErr) => console.error(`Could not drop partial collection ${id}:`, dropErr))
+    throw err
+  }
+}
+
+/** @description Replaces a file's content collection with a fresh import from disk. */
+export async function reimportFileContent(id, filePath, type) {
+  await dropCollectionIfExists(id)
+  return ensureContentCollection(id, filePath, type)
+}
+
+/**
+ * @description True when `filePath` was modified after its content was last imported. Objects
+ * imported before contentMtime existed are never considered stale.
+ */
+export async function isContentStale(id, filePath) {
+  const db = await connectToMongoDB()
+  const doc = await db.collection("medDataObjects").findOne({ id }, { projection: { contentMtime: 1 } })
+  if (!doc || doc.contentMtime == null) return false
+  return fs.statSync(filePath).mtimeMs > doc.contentMtime
 }
 
 /**
@@ -489,6 +492,13 @@ async function insertCSVIntoCollection(filePath, collectionName) {
               return cleanRow
             })
             
+            if (cleanedData.length === 0) {
+              // Empty or header-only CSV: insertMany rejects an empty batch, but the collection must
+              // still exist or the data table refuses to open the file.
+              await db.createCollection(collectionName)
+              resolve(null)
+              return
+            }
             const result = await collection.insertMany(cleanedData)
             console.log(`CSV data inserted with ${result.insertedCount} documents`)
             resolve(result)
@@ -570,7 +580,33 @@ async function insertJPGIntoCollection(filePath, collectionName) {
 export async function overwriteMEDDataObjectProperties(id, newData) {
   const db = await connectToMongoDB()
   const result = await db.collection("medDataObjects").updateOne({ id: id }, { $set: newData })
-  return result.modifiedCount > 0
+  return result.matchedCount > 0
+}
+
+/**
+ * @description Atomically adds a child id to a parent's childrenIDs array. $addToSet is a no-op
+ * if the id is already present, and - unlike a read-then-$set-the-whole-array pattern - it cannot
+ * lose a concurrent sibling's insertion/removal.
+ * @param {String} parentID Id of the parent MEDDataObject
+ * @param {String} childID Id of the child to add
+ * @returns {Promise<boolean>} true if the parent document was found
+ */
+export async function addChildToParent(parentID, childID) {
+  const db = await connectToMongoDB()
+  const result = await db.collection("medDataObjects").updateOne({ id: parentID }, { $addToSet: { childrenIDs: childID } })
+  return result.matchedCount > 0
+}
+
+/**
+ * @description Atomically removes a child id from a parent's childrenIDs array.
+ * @param {String} parentID Id of the parent MEDDataObject
+ * @param {String} childID Id of the child to remove
+ * @returns {Promise<boolean>} true if the parent document was found
+ */
+export async function removeChildFromParent(parentID, childID) {
+  const db = await connectToMongoDB()
+  const result = await db.collection("medDataObjects").updateOne({ id: parentID }, { $pull: { childrenIDs: childID } })
+  return result.matchedCount > 0
 }
 
 /**
@@ -636,14 +672,11 @@ export async function deleteMEDDataObject(id) {
   // Start the recursive deletion from the specified object
   await deleteChildren(id)
 
-  // Update the parent to remove the deleted object from childrenIDs
+  // Update the parent to remove the deleted object from childrenIDs. $pull is a single atomic
+  // update - no more reading the whole array, filtering it in memory, and writing it back.
   if (medDataObject.parentID) {
-    const parent = await collection.findOne({ id: medDataObject.parentID })
-    if (parent) {
-      const children = parent.childrenIDs || []
-      const updatedChildren = children.filter((childID) => childID !== id)
-
-      await collection.updateOne({ id: medDataObject.parentID }, { $set: { childrenIDs: updatedChildren } })
+    const parentUpdated = await removeChildFromParent(medDataObject.parentID, id)
+    if (parentUpdated) {
       console.log(`Parent MEDDataObject with id ${medDataObject.parentID} updated`)
     }
   }
@@ -682,6 +715,28 @@ export async function getCollectionRows(collectionId, limit = 10000) {
     .limit(limit)
     .toArray();
   return docs.map(stripIds);
+}
+
+/**
+ * @description Get every document of a collection, with Date fields converted to ISO strings and
+ * `_id` left intact (unlike getCollectionRows, which strips it) - some callers (e.g.
+ * dataTableFromDB.jsx) key rows off `_id`. Uses the shared connection instead of opening and
+ * closing a fresh MongoClient per call.
+ * @param {String} collectionName
+ * @returns {Promise<Array>} fetchedData
+ */
+export async function getCollectionData(collectionName) {
+  const db = await connectToMongoDB()
+  const collection = db.collection(collectionName)
+  const fetchedData = await collection.find({}).toArray()
+
+  return fetchedData.map((item) => {
+    const dataObject = {}
+    for (const [key, value] of Object.entries(item)) {
+      dataObject[key] = value instanceof Date ? value.toISOString() : value
+    }
+    return dataObject
+  })
 }
 
 

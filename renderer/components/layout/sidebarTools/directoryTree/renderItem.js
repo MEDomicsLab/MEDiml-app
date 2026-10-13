@@ -116,6 +116,11 @@ const iconExtension = {
       <Building2 size={iconSize} className={iconClass} style={{ color: "rgb(17, 231, 63)" }} />
     </span>
   ),
+  nii: (
+    <span>
+      <Building2 size={iconSize} className={iconClass} style={{ color: "rgb(17, 231, 63)" }} />
+    </span>
+  ),
   npy: (
     <span>
       <FileCode size={iconSize} className={iconClass} style={{ color: "rgb(255, 208, 0)" }} />

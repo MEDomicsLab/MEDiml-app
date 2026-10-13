@@ -1,10 +1,10 @@
-import React, { useState, useContext, useEffect, useRef } from "react"
-import { Badge } from "primereact/badge"
-import { OverlayPanel } from "primereact/overlaypanel"
-import { Button } from "primereact/button"
-import { NotificationContext } from "./notificationContext"
 import { ipcRenderer } from "electron"
+import { Badge } from "primereact/badge"
+import { Button } from "primereact/button"
+import { OverlayPanel } from "primereact/overlaypanel"
+import { useContext, useEffect, useRef, useState } from "react"
 import { Card } from "react-bootstrap"
+import { NotificationContext } from "./notificationContext"
 
 /**
  * @description - This component is the notification overlay component that will be used in the main layout component
@@ -115,7 +115,7 @@ const NotificationOverlay = () => {
         <Button icon="pi pi-bell" text aria-label="Notification" onClick={(e) => op.current.toggle(e)} style={style}>
           {notifications.length > 0 && <Badge value={notifications.length} severity="danger"></Badge>}
         </Button>
-        <OverlayPanel ref={op} style={style2} dismissable={false}>
+        <OverlayPanel ref={op} style={style2} dismissable={false} showCloseIcon >
           <p
             style={{
               color: "#a3a3a3",

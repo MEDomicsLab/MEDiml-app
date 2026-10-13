@@ -1,9 +1,9 @@
-import React, { useCallback, useState, useContext } from "react"
+import React, { useCallback, useState } from "react"
 import { useDropzone } from "react-dropzone"
 import { MEDDataObject } from "../../workspace/NewMedDataObject"
 import { toast } from "react-toastify"
 import { getDroppedOrSelectedFiles } from "html5-file-selector"
-import { DataContext } from "../../workspace/dataContext"
+import { useMEDDataStore } from "../../workspace/useMEDData"
 import { randomUUID } from "crypto"
 import { insertMEDDataObjectIfNotExists } from "../../mongoDB/mongoDBUtils"
 
@@ -27,7 +27,7 @@ export default function DropzoneComponent({ children, item = undefined, setIsDro
     borderWidth: "0px"
   })
 
-  const { globalData } = useContext(DataContext)
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
 
   /**
    * @description This function is used to get the fullPath of the dragged files, in order to know if we drag only file(s) or a folder
@@ -40,7 +40,7 @@ export default function DropzoneComponent({ children, item = undefined, setIsDro
 
     const folderMap = new Map() // Map to store folder path and MEDDataObject
     const parentID = item.index
-    let globalDataCopy = { ...globalData }
+    let globalDataCopy = { ...medDataStore.snapshot() }
 
     for (const file of files) {
       let fileObject = file.fileObject

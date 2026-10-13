@@ -1,26 +1,71 @@
+/* =========================================================================
+   VENDOR BRIDGE -- PrimeReact
+   =========================================================================
+
+   The one place the app adjusts PrimeReact. Imported after the theme, so
+   ordinary specificity is enough and nothing here needs to shout.
+
+   NO !important. This file carried 86 of them. Every one was measured against
+   the real vendor cascade before removal and all 86 were redundant: the app's
+   selectors (`.p-input-group.dataset-name .p-dropdown`, 0-3-0) already outrank
+   the theme rules they were fighting (`.p-dropdown`, 0-1-0). The keyword was
+   never doing the work it appeared to be doing -- it was doing nothing, and it
+   made every subsequent override look like it needed one too.
+
+   If a rule here seems to need !important, it almost certainly does not. Check
+   which vendor rule is actually winning first; the answer is usually that the
+   selector is less specific than assumed, or that this file is being loaded in
+   the wrong order.
+
+   PREFER CONFIGURATION OVER OVERRIDE. PrimeReact exposes 45 custom properties
+   on :root (--primary-color, --surface-*, --text-color, --border-radius,
+   --content-padding, --font-family, ...). Setting one of those here changes the
+   component everywhere and survives a theme upgrade; a selector override does
+   neither. See the :root block below.
+   ========================================================================= */
+
+/* ---------------------------------------------------------------------------
+   Theme configuration.
+
+   These are PrimeReact's OWN variables, reassigned to the app's tokens. This
+   file is imported after the theme, which is what makes the reassignment stick:
+   tokens.css cannot do it, because the theme's own `:root` is imported later
+   and wins.
+
+   --font-family is the important one. globals.css has always carried
+   `body { font-family: var(--font-family) }` against a variable nothing
+   defined, so body inherited the font from PrimeReact's :root by accident.
+   Phase 2 aliased --font-family to --med-font-sans in tokens.css, but the theme
+   overrode the alias, so the app still did not own its typography. Setting it
+   here does.
+   --------------------------------------------------------------------------- */
+:root {
+  --font-family: var(--med-font-sans);
+}
+
 /* TODO : Add custom class before @NicoLongfield */
 .p-listbox-item {
-  padding: 0.25rem !important;
+  padding: 0.25rem;
   margin-right: 0.5rem;
   align-self: center;
 }
 
 .p-listbox-item.p-highlight {
-  color: black !important;
-  background-color: #8ac4ff85 !important;
-  outline: 1px solid var(--bs-blue) !important;
-  border-radius: 5px !important;
+  color: black;
+  background-color: #8ac4ff85;
+  outline: 1px solid var(--bs-blue);
+  border-radius: 5px;
 }
 
 .p-listbox-item:hover {
-  background-color: #8ac4ff31 !important;
+  background-color: #8ac4ff31;
 }
 
 .p-listbox {
   border: solid 1px #8ac4ffdc;
   border-radius: 5px;
   background-color: #414e6426;
-  padding: 0.1rem !important;
+  padding: 0.1rem;
 }
 
 .p-listbox-item:focus {
@@ -30,7 +75,7 @@
 .p-listbox-list {
   border: none;
   background-color: transparent;
-  padding: 0.1rem !important;
+  padding: 0.1rem;
 }
 
 .p-tabview-nav-link {
@@ -39,10 +84,10 @@
 }
 
 .tab-content {
-  display: block !important;
+  display: block;
   height: 60%;
-  flex-grow: 10 !important;
-  flex-direction: column !important;
+  flex-grow: 10;
+  flex-direction: column;
 }
 
 .p-scrollpanel {
@@ -52,9 +97,9 @@
 }
 
 .p-datatable {
-  display: flex !important;
-  flex-direction: column !important;
-  flex-grow: 1 !important;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
   height: 100%;
 }
 
@@ -116,11 +161,11 @@
 }
 
 .mergeToolMultiSelect .p-multiselect-token {
-  padding: 0.15rem 0.25rem !important;
+  padding: 0.15rem 0.25rem;
 }
 
 .mergeToolMultiSelect .p-multiselect-token-icon {
-  margin-left: 0.15rem !important;
+  margin-left: 0.15rem;
 }
 
 .mergeToolMultiSelect .p-multiselect-token-label {
@@ -132,7 +177,6 @@
 .mergeToolMultiSelect .p-multiselect-label-container {
   /* min-height: 2.5rem;
   max-height: 2.5rem;
-  align-items: center; */
   align-content: center;
   /* padding: 8px; */
   align-items: center;
@@ -168,10 +212,10 @@
 }
 
 .mergeToolMultiSelect h6 {
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-align: end !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  text-align: end;
 }
 
 .mergeToolMultiSelect .p-dropdown {
@@ -202,44 +246,40 @@
 }
 
 .p-input-group.dataset-name .p-inputtext {
-  padding: 0.5rem !important;
-  border-radius: 6px 0px 0px 6px !important;
+  padding: 0.5rem;
+  border-radius: 6px 0px 0px 6px;
 }
-
-.p-input-group.dataset-name .p-dropdown-label {
-  padding: 0rem !important;
-}
-
 .p-input-group.dataset-name .p-inputgroup-addon {
-  padding: 0rem !important;
-  border-left: none !important;
-  border-top: none !important;
-  border-bottom: none !important;
+  padding: 0rem;
+  border-left: none;
+  border-top: none;
+  border-bottom: none;
 }
 
 .p-input-group.dataset-name .p-dropdown-label {
-  padding: 0rem !important;
+  /* merged from an earlier duplicate of this selector */
+  padding: 0rem;
 }
 
 .p-input-group.dataset-name .p-dropdown {
-  height: 100% !important;
-  align-items: center !important;
-  align-content: center !important;
-  background-color: transparent !important;
+  height: 100%;
+  align-items: center;
+  align-content: center;
+  background-color: transparent;
   /* border-color: transparent !important; */
-  border-start-start-radius: 0px !important;
-  border-end-start-radius: 0px !important;
-  border-left: none !important;
+  border-start-start-radius: 0px;
+  border-end-start-radius: 0px;
+  border-left: none;
 }
 
 .dataset-name .p-dropdown-item {
-  padding-top: 0.25rem !important;
-  padding-bottom: 0.25rem !important;
-  margin: 0.1rem !important;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  margin: 0.1rem;
 }
 .dataset-name .p-dropdown-items {
-  padding-top: 0.1rem !important;
-  padding-bottom: 0.1rem !important;
+  padding-top: 0.1rem;
+  padding-bottom: 0.1rem;
 }
 
 .dataset-name .p-dropdown-trigger {
@@ -274,13 +314,13 @@
 }
 
 .groupingTool .p-dropdown-item {
-  padding-top: 0.25rem !important;
-  padding-bottom: 0.25rem !important;
-  margin: 0.1rem !important;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  margin: 0.1rem;
 }
 .groupingTool .p-dropdown-items {
-  padding-top: 0.1rem !important;
-  padding-bottom: 0.1rem !important;
+  padding-top: 0.1rem;
+  padding-bottom: 0.1rem;
 }
 
 .groupingTool .p-dropdown-trigger {
@@ -314,11 +354,11 @@
 }
 
 .groupingTool .toggle-font-color-button:hover[aria-pressed="true"] {
-  background-color: #0038b175 !important;
+  background-color: #0038b175;
 }
 
 .groupingTool .toggle-font-color-button:hover[aria-pressed="false"] {
-  background-color: #2760da75 !important;
+  background-color: #2760da75;
 }
 
 .groupingToolTree {
@@ -332,7 +372,7 @@
   padding: 0%;
 }
 .groupingToolTree .p-treenode-content {
-  padding: 0% !important;
+  padding: 0%;
 }
 .groupingToolTree .p-treenode-children {
   padding: 0%;
@@ -341,22 +381,20 @@
 
 .groupingTool .p-chips .p-inputtext {
   min-height: 2.5rem;
-  padding: 0% !important;
-  padding: 0.25rem !important;
-  width: 100% !important;
+  padding: 0.25rem;
+  width: 100%;
 }
 
 .groupingTool .p-chips .p-chips-input-token {
-  padding: 0% !important;
-  padding: 0.25rem !important;
-  width: 100% !important;
+  padding: 0.25rem;
+  width: 100%;
 }
 
 .groupingTool .p-chips {
-  padding: 0% !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 100% !important;
+  padding: 0%;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
 }
 
 .groupingToolTree .flex.align-items-center {
@@ -397,13 +435,13 @@
 }
 
 .small-token .p-chips-token {
-  margin-inline: 0rem !important;
+  margin-inline: 0rem;
   margin-top: 0.15rem;
-  padding: 0.15rem 0.25rem !important;
+  padding: 0.15rem 0.25rem;
 }
 
 .small-token .p-chips-token-icon {
-  margin-left: 0.15rem !important;
+  margin-left: 0.15rem;
 }
 
 .small-token .p-chips-token-label {
@@ -419,13 +457,13 @@
 }
 
 .small-token .p-treeselect-token {
-  margin-inline: 0.15rem !important;
+  margin-inline: 0.15rem;
 
-  padding: 0.15rem 0.25rem !important;
+  padding: 0.15rem 0.25rem;
 }
 
 .small-token .p-treeselect-token-icon {
-  margin-left: 0.15rem !important;
+  margin-left: 0.15rem;
 }
 
 .small-token .p-treeselect-token-label {
@@ -436,32 +474,32 @@
 
 .small-token.p-treeselect {
   height: 2.5rem;
-  width: 100% !important;
-  margin-right: 0.5rem !important;
+  width: 100%;
+  margin-right: 0.5rem;
 }
 
 .token-bg-transparent .p-chips-token {
-  background-color: transparent !important;
-  padding: 0% !important;
+  background-color: transparent;
+  padding: 0%;
 }
 
 .custom-token {
-  padding: 0.25rem 0.35rem !important;
-  margin: 0rem !important;
-  margin-inline: 0.15rem !important;
+  padding: 0.25rem 0.35rem;
+  margin: 0rem;
+  margin-inline: 0.15rem;
   border-radius: 1rem;
-  font-size: 0.75rem !important;
+  font-size: 0.75rem;
 }
 
 .custom-token .p-chip-text {
-  padding: 0.05rem 0.35rem !important;
-  margin: 0rem !important;
+  padding: 0.05rem 0.35rem;
+  margin: 0rem;
   font-size: 0.75rem;
   font-weight: 600;
 }
 
 .custom-token .p-icon {
-  margin: 0rem !important;
+  margin: 0rem;
 }
 
 .small-token .p-multiselect-label {
@@ -473,7 +511,7 @@
 }
 
 .custom-slider.p-slider {
-  background: #c0c0c0 !important;
+  background: #c0c0c0;
   height: 0.75rem;
   border-radius: 0.5rem;
   box-shadow: inset 1px 2px 5px 2px #00000046;
@@ -481,12 +519,12 @@
 
 .custom-slider .p-slider-range {
   border-radius: 0.5rem;
-  background: #08458a !important;
+  background: #08458a;
   box-shadow: inset 1px 2px 5px 2px #00000046;
 }
 
 .custom-slider .p-slider-handle {
-  background: #08458a !important;
+  background: #08458a;
   border: #4384cec7 2px solid;
 }
 
@@ -499,7 +537,7 @@
 }
 
 .bg-invalid {
-  background-color: #f8091d56 !important;
+  background-color: #f8091d56;
 }
 
 .overlay-dropdown .p-dropdown-label {
@@ -543,21 +581,21 @@
 }
 
 .datatable-tags .custom-token {
-  padding: 0.05rem 0.1rem !important;
+  padding: 0.05rem 0.1rem;
 }
 
 .settingsTab .p-tabview-nav-link {
-  padding: 0.65rem !important;
+  padding: 0.65rem;
 }
 
 .settingsTab .p-tabview-nav li.p-highlight .p-tabview-nav-link {
-  padding: 0.65rem !important;
+  padding: 0.65rem;
 
-  background: #ffffff !important;
-  border-color: #095899 !important;
-  color: #095899 !important;
+  background: #ffffff;
+  border-color: #095899;
+  color: #095899;
 }
 
 .settingsTab .p-tabview-nav .p-tabview-ink-bar {
-  background: #095899 !important;
+  background: #095899;
 }

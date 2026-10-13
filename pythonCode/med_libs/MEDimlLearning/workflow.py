@@ -79,17 +79,59 @@ class LearningWorkflow:
         results: list[dict[str, Any]] = []
         contexts = []
 
+        used_learn_folders: set = set()
         for index, pipeline in enumerate(pipelines, start=1):
-            context = pipeline.run(self.set_progress, pipeline_number=index)
+            context = pipeline.run(self.set_progress, pipeline_number=index, used_learn_folders=used_learn_folders)
             contexts.append(context)
             results.append(
                 {
                     "pipeline": pipeline.pipeline_name,
                     "id": pipeline.id,
+                    # Study folder of the pipeline, used to train its final model later
+                    "path_study": str(context.path_study).replace("\\", "/") if context.path_study is not None else None,
                 }
             )
 
         return self._aggregate_results(results, contexts)
+
+    def finalize(self, pipeline_name: str, path_study: str, models_path: str | None = None) -> dict[str, Any]:
+        """Trains the final model of a pipeline on the whole learning set of the study of a previous run.
+
+        Args:
+            pipeline_name: Name of the pipeline ("pip" followed by its node ids) as returned by run_all.
+            path_study: Study folder of the pipeline as returned by run_all.
+            models_path: Folder in which a copy of the final model is saved.
+
+        Returns:
+            The information and holdout performance of the final model.
+        """
+        pipeline = next((pip for pip in self.build_pipelines() if pip.pipeline_name == pipeline_name), None)
+        if pipeline is None:
+            raise ValueError("This pipeline no longer exists in the scene. Run the experiment again before finalizing the model.")
+
+        context = pipeline.finalize(self.set_progress, path_study)
+        final_model = context.extras.get("final_model")
+        if final_model is None:
+            raise ValueError("No final model was trained. The pipeline must contain a Radiomics Learner node.")
+
+        model_copy_path = None
+        if models_path:
+            name_save = final_model["model_id"].removesuffix("_FINAL")
+            path_copy = Path(models_path) / f"{context.experiment_label}__{pipeline.pipeline_description}__{name_save}_FINAL.pickle"
+            path_copy.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(final_model["model_path"], path_copy)
+            model_copy_path = str(path_copy).replace("\\", "/")
+
+        return {
+            "final_model": {
+                **final_model,
+                "pipeline": pipeline.pipeline_name,
+                "id": pipeline.id,
+                "pipeline_description": pipeline.pipeline_description,
+                "experiment": context.experiment_label,
+                "model_copy_path": model_copy_path,
+            }
+        }
 
     def _aggregate_results(self, results: list[dict[str, Any]], contexts: list[LearningContext]) -> dict[str, Any]:
         experiments_labels: list[str] = []
