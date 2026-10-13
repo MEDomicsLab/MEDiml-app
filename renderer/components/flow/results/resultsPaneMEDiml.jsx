@@ -102,6 +102,8 @@ const ResultsPaneMEDiml = () => {
         throw new Error("Invalid flow content: missing nodes");
       }
       const newFlow = structuredClone(flowContent);
+      // The guiding boxes are only visual, they are not sent to the backend (as in the learning flowCanvas)
+      newFlow.nodes = newFlow.nodes.filter((node) => node.type !== "boxNode");
       newFlow.nodes.forEach((node) => {
         const nodeID = node.id.toString();
         modifiedFlow.drawflow.Home.data[nodeID] = {
