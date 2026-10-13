@@ -2,9 +2,11 @@
 import { ipcRenderer } from "electron"
 import { Briefcase, House, Layers, Settings, Target } from "lucide-react"
 import { Tooltip } from "primereact/tooltip"
-import { useContext, useEffect, useState } from "react"
+import { useCallback, useContext, useEffect, useState } from "react"
 import { NavDropdown } from "react-bootstrap"
 import Nav from "react-bootstrap/Nav"
+import { requestBackend } from "../../utilities/requests"
+import { SETTINGS_HEALTH_EVENT } from "../../utilities/settingsHealth"
 import { WorkspaceContext } from "../workspace/workspaceContext"
 import { LayoutModelContext } from "./layoutContext"
 
@@ -17,7 +19,7 @@ import { LayoutModelContext } from "./layoutContext"
 const IconSidebar = ({ onSidebarItemSelect }) => {
   // eslint-disable-next-line no-unused-vars
   const { dispatchLayout, developerMode, setDeveloperMode } = useContext(LayoutModelContext)
-  const { workspace } = useContext(WorkspaceContext)
+  const { workspace, port } = useContext(WorkspaceContext)
   const [appVersion, setAppVersion] = useState("")
   const [activeKey, setActiveKey] = useState("home") // activeKey is the name of the page
   const [disabledIcon, setDisabledIcon] = useState("disabled") // disabled is the state of the page
@@ -25,7 +27,59 @@ const IconSidebar = ({ onSidebarItemSelect }) => {
   const [extractionBtnstate, setExtractionBtnstate] = useState(false)
   const [buttonClass, setButtonClass] = useState("")
 
+  // Health of the app's dependencies, null until checked (no alert is shown for unknown states)
+  const [health, setHealth] = useState({ serverIsRunning: null, mongoServerIsRunning: null, pythonPath: null, missingRequirements: null })
+
   const delayOptions = { showDelay: 750, hideDelay: 0 }
+
+  const updateHealth = useCallback((partial) => {
+    setHealth((prev) => (Object.keys(partial).every((key) => prev[key] === partial[key]) ? prev : { ...prev, ...partial }))
+  }, [])
+
+  const checkServices = useCallback(() => {
+    ipcRenderer.invoke("checkMongoIsRunning").then((status) => updateHealth({ mongoServerIsRunning: !!status }))
+    requestBackend(
+      port,
+      "get_server_health",
+      { pageId: "settings" },
+      (data) => updateHealth({ serverIsRunning: !!data }),
+      () => updateHealth({ serverIsRunning: false })
+    )
+  }, [port, updateHealth])
+
+  // The Python checks spawn a process, so they run once here and are then kept up to date by the Settings page
+  useEffect(() => {
+    if (!workspace.hasBeenSet) return
+    Promise.all([ipcRenderer.invoke("getBundledPythonEnvironment"), ipcRenderer.invoke("get-settings")]).then(([bundledPythonPath, settings]) => {
+      updateHealth({ pythonPath: bundledPythonPath || settings?.condaPath || "" })
+      if (!bundledPythonPath) return
+      ipcRenderer
+        .invoke("getMissingPythonRequirements", bundledPythonPath)
+        .then((missing) => updateHealth({ missingRequirements: missing.length }))
+        .catch(() => {})
+    })
+  }, [workspace.hasBeenSet, updateHealth])
+
+  useEffect(() => {
+    if (!workspace.hasBeenSet) return
+    checkServices()
+    const interval = setInterval(checkServices, 10000)
+    return () => clearInterval(interval)
+  }, [workspace.hasBeenSet, checkServices])
+
+  // The Settings page shares the results of its own checks
+  useEffect(() => {
+    const onSettingsHealth = (event) => updateHealth(event.detail)
+    window.addEventListener(SETTINGS_HEALTH_EVENT, onSettingsHealth)
+    return () => window.removeEventListener(SETTINGS_HEALTH_EVENT, onSettingsHealth)
+  }, [updateHealth])
+
+  const settingsIssues = []
+  if (health.serverIsRunning === false) settingsIssues.push("Go server is down")
+  if (health.mongoServerIsRunning === false) settingsIssues.push("MongoDB server is down")
+  if (health.pythonPath === "") settingsIssues.push("Python path is missing")
+  if (health.missingRequirements > 0) settingsIssues.push(`${health.missingRequirements} Python package${health.missingRequirements > 1 ? "s are" : " is"} missing`)
+  const showSettingsAlert = workspace.hasBeenSet && settingsIssues.length > 0
 
   // default action to set developer mode to true
   useEffect(() => {
@@ -206,13 +260,16 @@ const IconSidebar = ({ onSidebarItemSelect }) => {
             className={`settingsNav btnSidebar`}
             data-pr-at="right center"
             data-pr-my="left center"
-            data-pr-tooltip="Settings"
+            data-pr-tooltip={showSettingsAlert ? `Settings\n• ${settingsIssues.join("\n• ")}` : "Settings"}
             eventKey="settings"
             data-tooltip-id="tooltip-settings"
             onClick={() => dispatchLayout({ type: `openSettings`, payload: { pageId: "Settings" } })}
             disabled={disabledIcon}
           >
-            <Settings size={"1.25rem"} width={"100%"} height={"100%"} />
+            <span className="settings-icon-wrapper">
+              <Settings size={"1.25rem"} width={"100%"} height={"100%"} />
+              {showSettingsAlert && <span className="settings-alert-dot" />}
+            </span>
           </Nav.Link>
         </Nav>
         {/* ------------------------------------------- END ICON NAVBAR ----------------------------------------- */}

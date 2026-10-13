@@ -13,6 +13,7 @@ import { useCallback, useContext, useEffect, useRef, useState } from "react"
 import { Col } from "react-bootstrap"
 import { toast } from "react-toastify"
 import { requestBackend } from "../../utilities/requests"
+import { shareSettingsHealth } from "../../utilities/settingsHealth"
 import FirstSetupModal from "../generalPurpose/installation/firstSetupModal"
 import { resetConnection } from "../workspace/data/MongoConnection"
 import { WorkspaceContext } from "../workspace/workspaceContext"
@@ -62,6 +63,7 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
 
   const checkMongoIsRunning = useCallback(() => {
     ipcRenderer.invoke("checkMongoIsRunning").then((status) => {
+      shareSettingsHealth({ mongoServerIsRunning: !!status })
       if (!isMountedRef.current) return
       setMongoServerIsRunning((prev) => (prev === status ? prev : status))
     })
@@ -73,6 +75,7 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
       "get_server_health",
       { pageId: pageId },
       (data) => {
+        shareSettingsHealth({ serverIsRunning: !!data })
         if (!isMountedRef.current) return
         setServerIsRunning((prev) => {
           const next = !!data
@@ -80,6 +83,7 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
         })
       },
       () => {
+        shareSettingsHealth({ serverIsRunning: false })
         if (!isMountedRef.current) return
         setServerIsRunning((prev) => (prev ? false : prev))
       }
@@ -88,10 +92,11 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
 
   const checkBundledPython = useCallback(() => {
     ipcRenderer.invoke("getBundledPythonEnvironment").then((res) => {
+      shareSettingsHealth({ pythonPath: res || condaPath || "" })
       if (!isMountedRef.current) return
       setBundledPythonPath((prev) => (prev === res ? prev : res))
     })
-  }, [])
+  }, [condaPath])
 
   const loadPythonPackages = useCallback((pythonPath) => {
     if (!pythonPath) return
@@ -149,6 +154,7 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
     ipcRenderer
       .invoke("getMissingPythonRequirements", pythonPath)
       .then((missing) => {
+        shareSettingsHealth({ missingRequirements: missing.length })
         if (!isMountedRef.current) return
         setMissingRequirements(missing)
         setRequirementsCheckError(null)
@@ -341,6 +347,7 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
                       ipcRenderer.invoke("kill-server").then((stopped) => {
                         if (stopped) {
                           setServerIsRunning(false)
+                          shareSettingsHealth({ serverIsRunning: false })
                           console.log("server was stopped", stopped)
                         }
                       })
@@ -360,6 +367,7 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
                       value={condaPath}
                       onChange={(e) => {
                         setCondaPath(e.target.value)
+                        shareSettingsHealth({ pythonPath: bundledPythonPath || e.target.value || "" })
                         saveSettings({ ...settings, condaPath: e.target.value })
                       }}
                     />
@@ -367,6 +375,7 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
                       onClick={() => {
                         ipcRenderer.invoke("open-dialog-exe").then((selectedPath) => {
                           setCondaPath(selectedPath)
+                          shareSettingsHealth({ pythonPath: bundledPythonPath || selectedPath || "" })
                           saveSettings({ ...settings, condaPath: selectedPath })
                         })
                       }}
