@@ -135,10 +135,30 @@
   margin-top: 0.5rem;
 }
 
+/* Wraps the Settings icon so the notification dot is placed relative to the icon, not the full-width button */
+.settings-icon-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Notification dot shown when the server, MongoDB or Python needs attention */
+.settings-alert-dot {
+  position: absolute;
+  top: -0.15rem;
+  right: -0.15rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--med-status-error);
+  box-shadow: 0 0 0 2px #3a3a3a;
+  pointer-events: none;
+}
+
 /* ===== TOOLTIP STYLE (MATCH DARK UI) ===== */
 .tooltip-icon-sidebar > .p-tooltip-text {
   background: #111;
   color: #fff;
+  white-space: pre-line;
   border-radius: 6px;
   padding: 0.4rem 0.6rem;
   box-shadow: 0 4px 10px rgba(0,0,0,0.5);
