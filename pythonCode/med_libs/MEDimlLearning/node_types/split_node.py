@@ -26,7 +26,7 @@ class SplitNode(LearningNode):
         if active_method == "cv":
             context.nb_split = self.params.get("cv", {}).get("nFolds", 5)
         elif active_method == "random":
-            context.nb_split = self.params.get("random", {}).get("nSplits", 10)
+            context.nb_split = (self.params.get("Random") or self.params.get("random") or {}).get("nSplits", 10)
         else:
             context.nb_split = 5
         context.designed_experiment = False
@@ -65,6 +65,10 @@ class SplitNode(LearningNode):
             context.path_study = self.path_study
 
     def _resolve_settings_path(self) -> Path:
+        app_folder = Path(__file__).resolve().parents[4]
+        path_settings = app_folder / "baseFiles" / "ml_settings.yml"
+        if path_settings.exists():
+            return path_settings
         return Path.cwd() / "baseFiles" / "ml_settings.yml"
 
     def generate_code(self, file_obj, settings: dict[str, Any]) -> None:
@@ -82,7 +86,7 @@ class SplitNode(LearningNode):
                 "if active_method == 'cv':",
                 "    nb_split = split_settings.get('cv', {}).get('nFolds', 5)",
                 "elif active_method == 'random':",
-                "    nb_split = split_settings.get('random', {}).get('nSplits', 10)",
+                "    nb_split = (split_settings.get('Random') or split_settings.get('random') or {}).get('nSplits', 10)",
                 "else:",
                 "    nb_split = 5",
                 "designed_experiment = False",
