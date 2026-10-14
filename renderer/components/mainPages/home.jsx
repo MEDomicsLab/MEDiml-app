@@ -24,6 +24,8 @@ const POC_VARIANTS = {
     title: "Light Version",
     tagline: "A light subset to explore the full workflow in minutes",
     specs: "10 patients · 4 modalities · ~650 MB",
+    archive: "MEDiml-app-STS-PoC-DATA-10-PATIENTS.zip", // Zenodo archive to download manually if the download fails
+    archiveFor: "Light POC",
     icon: Zap,
     variant: "primary",
     flex: "1 1 220px"
@@ -32,11 +34,19 @@ const POC_VARIANTS = {
     title: "Full Version",
     tagline: "The complete cohort to reproduce the study results",
     specs: "51 patients · 4 modalities · ~3.15 GB",
+    archive: "MEDiml-app-STS-PoC-DATA.zip",
+    archiveFor: "Full POC",
     icon: Database,
     variant: "outline-primary",
     flex: "1.6 1 300px"
   }
 }
+
+// Files of the Zenodo record needed by both POC variants, to download manually with the archive if the download fails
+const POC_EXTRA_FILES = [
+  { file: "roiNames_stsGTV.csv", description: "the definitions of the ROIs to use" },
+  { file: "STS_PoC_Outcomes.csv", description: "the clinical outcomes of each patient" }
+]
 
 // localStorage key of the POC variants already present, as { [workspacePath]: { [pocSize]: pocDataPath } }
 const POC_PRESENT_KEY = "pocDataPresent"
@@ -81,6 +91,7 @@ const HomePage = () => {
   const [requirementsMet, setRequirementsMet] = useState(true)
   const [pocProgress, setPocProgress] = useState(null) // null when idle, else { now, label, pocSize }
   const [pocPresent, setPocPresent] = useState({}) // POC variants already present in the workspace, by pocSize
+  const [manualDownloadOpen, setManualDownloadOpen] = useState(false) // Manual download instructions, opened when a download fails
   const pocPollRef = useRef(null)
   const workspacePath = workspace.workingDirectory?.path
 
@@ -128,6 +139,7 @@ const HomePage = () => {
         finish()
         if (response.error) {
           toast.error(response.error.toast || response.error.message || "Failed to download the POC data")
+          setManualDownloadOpen(true)
           return
         }
         // Every series was already in the workspace: remember it to avoid duplicate downloads
@@ -144,10 +156,14 @@ const HomePage = () => {
           `${POC_VARIANTS[pocSize].title} POC data ready in DATA/STS_POC: ${response.patients} patients (${response.positives} with lung metastases), ` +
             `${response.downloaded} downloaded, ${response.skipped} already present${failedNote}`
         )
+        if (response.failed) {
+          setManualDownloadOpen(true)
+        }
       },
       (error) => {
         finish()
         toast.error("Failed to download the POC data: " + error)
+        setManualDownloadOpen(true)
       }
     )
   }
@@ -193,6 +209,7 @@ const HomePage = () => {
           paddingTop: "1rem",
           display: "flex",
           flexDirection: "column",
+          maxHeight: "100%",
           overflowY: "auto",
           scrollbarColor: "#b0b0b0 #f5f5f5"
         }}
@@ -346,6 +363,68 @@ const HomePage = () => {
                 </small>
               </>
             )}
+            <details
+              className="alert alert-warning mt-3 mb-0"
+              open={manualDownloadOpen}
+              onToggle={(event) => setManualDownloadOpen(event.currentTarget.open)}
+            >
+              <summary style={{ cursor: "pointer" }}>
+                <TriangleAlert size={18} strokeWidth={1.5} className="mr-2 mb-1 inline-block" />
+                The automatic download is failing?
+              </summary>
+              <div className="mt-2">
+                <p className="mb-2">
+                  You can click again to retry, or download the data manually from{" "}
+                  <a href={POC_ZENODO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "#4991dfff", textDecoration: "none" }}>
+                    <u>Zenodo</u>
+                  </a>
+                  :
+                </p>
+                <ol className="mb-0" style={{ paddingLeft: "1.25rem" }}>
+                  <li>
+                    Open the{" "}
+                    <a href={POC_ZENODO_URL} target="_blank" rel="noopener noreferrer">
+                      Zenodo record
+                    </a>{" "}
+                    and download the archive of the version you want:
+                    <ul className="mb-1">
+                      {Object.entries(POC_VARIANTS).map(([pocSize, { archive, archiveFor }]) => (
+                        <li key={pocSize}>
+                          <code>{archive}</code> for the {archiveFor}
+                        </li>
+                      ))}
+                    </ul>
+                    Then download these files from the same record, they are needed by both versions:
+                    <ul className="mb-1">
+                      {POC_EXTRA_FILES.map(({ file, description }) => (
+                        <li key={file}>
+                          <code>{file}</code>: {description}
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                  <li>
+                    Create a new <code>STS_POC</code> folder in the <code>DATA</code> folder of your workspace
+                    {workspacePath && (
+                      <>
+                        : <code>{path.join(workspacePath, "DATA", "STS_POC")}</code>
+                      </>
+                    )}
+                    .
+                  </li>
+                  <li>
+                    Extract all the data of the archive into this <code>DATA/STS_POC</code> folder, and place the{" "}
+                    {POC_EXTRA_FILES.map(({ file }, index) => (
+                      <span key={file}>
+                        {index > 0 && " and "}
+                        <code>{file}</code>
+                      </span>
+                    ))}{" "}
+                    files in it as well.
+                  </li>
+                </ol>
+              </div>
+            </details>
           </SectionCard>
 
             {/* Warning section */}
