@@ -1,6 +1,6 @@
-import MEDconfig, { PORT_FINDING_METHOD } from "../../medomics.dev"
 import { app } from "electron"
-import { getPythonEnvironment, getBundledPythonEnvironment } from "./pythonEnv"
+import MEDconfig, { PORT_FINDING_METHOD } from "../../medomics.dev"
+import { getBundledPythonEnvironment, getPythonEnvironment } from "./pythonEnv"
 // The Go server is started with spawn, not execFile: execFile keeps all of its output in memory and
 // kills it once that output exceeds maxBuffer (1 MB), which long learning runs easily produce
 const { exec, spawn } = require("child_process")
@@ -112,7 +112,8 @@ export function killProcessOnPort(port) {
 
 export async function runServer(isProd, serverPort, serverProcess, serverState, condaPath = null) {
   // Runs the server
-  let pythonEnvironment = getPythonEnvironment()
+  // The python environment is not used on Windows
+  let pythonEnvironment = process.platform !== "win32" ? getPythonEnvironment() : undefined
   if (process.platform !== "win32" && condaPath === null) {
     condaPath = pythonEnvironment
     if (pythonEnvironment !== undefined) {

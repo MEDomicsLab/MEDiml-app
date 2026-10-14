@@ -19,7 +19,8 @@ export function getPythonEnvironment(medCondaEnv = "med_conda_env") {
   let settingsFound = fs.existsSync(settingsFilePath)
   let settings = {}
   if (settingsFound) {
-    let settings = JSON.parse(fs.readFileSync(settingsFilePath, "utf8"))
+    // Assigned to the settings above (not a new variable), so all the settings are kept when the conda path is saved below
+    settings = JSON.parse(fs.readFileSync(settingsFilePath, "utf8"))
     // Check if the conda environment is defined in the settings file
     if (settings.condaPath !== undefined) {
       pythonEnvironment = settings.condaPath
@@ -270,12 +271,13 @@ export function installPythonRequirements(mainWindow, pythonPath, requirements) 
 export function getInstalledPythonPackages(pythonPath = null) {
   let pythonPackages = []
   if (pythonPath === null) {
-    pythonPath = getPythonEnvironment()
+    // On Windows the app uses the bundled python, and getPythonEnvironment throws there (process.env.HOME is not defined)
+    pythonPath = process.platform === "win32" ? getBundledPythonEnvironment() : getPythonEnvironment()
   }
 
   let pythonPackagesOutput = ""
   try {
-    pythonPackagesOutput = execSync(`${pythonPath} -m pip list --format=json`).toString()
+    pythonPackagesOutput = execSync(`"${pythonPath}" -m pip list --format=json`).toString()
   } catch (error) {
     console.warn("Error retrieving python packages:", error)
   }
