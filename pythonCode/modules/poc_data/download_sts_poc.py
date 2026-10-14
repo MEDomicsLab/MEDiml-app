@@ -213,7 +213,7 @@ class GoExecScriptDownloadSTSPoc(GoExecutionScript):
                     toast=f"Not enough disk space for the {archive['name']}: {needed / 1e9:.1f} GB needed, {free / 1e9:.1f} GB free"
                 )
 
-            # Capped at 99: the renderer stops polling at 100, which send_response() sets when done.
+            # Capped at 99: the renderer stops polling at 100, which send_response() sets just before the response is sent.
             zip_path = work_root / "sts_poc.zip"
             try:
                 self.set_progress(label=f"Downloading the {archive['name']} from Zenodo", now=0)

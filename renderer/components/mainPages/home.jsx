@@ -116,16 +116,26 @@ const HomePage = () => {
    * @param {"lite"|"full"} pocSize - the POC variant to download
    */
   const handleDownloadPoc = (pocSize) => {
+    // Set once the final response is received: a progress request still pending at that time must not
+    // set the progress again, which left the card stuck on "Done" with the download finished
+    let done = false
     setPocProgress({ now: 0, label: "Starting download", pocSize })
     pocPollRef.current = setInterval(() => {
       requestBackend(port, "/poc_data/progress/" + POC_DOWNLOAD_ID, {}, (progress) => {
-        if (progress && progress.now !== undefined) {
-          setPocProgress({ now: Number(progress.now), label: progress.currentLabel, pocSize })
+        if (done || !progress || progress.now === undefined) return
+        const now = Number(progress.now)
+        if (now >= 100) {
+          // The script sets 100 just before sending its response: the response ends the download
+          stopPocPolling()
+          setPocProgress({ now: 100, label: "Finishing up", pocSize })
+        } else {
+          setPocProgress({ now, label: progress.currentLabel, pocSize })
         }
       })
     }, 1000)
 
     const finish = () => {
+      done = true
       stopPocPolling()
       setPocProgress(null)
       requestBackend(port, "removeId/" + POC_DOWNLOAD_ID, {}, () => {})
@@ -158,6 +168,11 @@ const HomePage = () => {
         )
         if (response.failed) {
           setManualDownloadOpen(true)
+        } else if (response.path) {
+          // Complete: remember it as for the data already present, to avoid duplicate downloads
+          const present = { ...pocPresent, [pocSize]: response.path }
+          setPocPresent(present)
+          savePocPresent(workspacePath, present)
         }
       },
       (error) => {
