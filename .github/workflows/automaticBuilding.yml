@@ -128,15 +128,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+      # Go >= 1.24 is required on macOS: older linkers do not write the LC_UUID load command
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: 1.21
+          go-version: "1.24"
 
       - name: Build go
         run: |
           cd go_server
-          go build main.go 
+          go build main.go
           cd ..
 
       - name: Set up Node.js
@@ -214,8 +215,28 @@ jobs:
       - name: Allocate more memory
         run: export NODE_OPTIONS=--max-old-space-size=8192
 
+      # Signing and notarization (utilScripts/macAfterSign.js). Without these secrets the app is ad-hoc signed:
+      # macOS no longer reports it as damaged, but users must allow it once in System Settings > Privacy & Security.
+      #   MAC_CERTIFICATE_P12_BASE64 / MAC_CERTIFICATE_PASSWORD: "Developer ID Application" certificate (.p12, base64)
+      #   APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID: Apple account used to notarize the app
+      # A secret that is not defined is an empty string, and electron-builder resolves an empty CSC_LINK to the
+      # project folder ("not a file" error), so the certificate variables are only exported when it is defined.
       - name: Build for Mac
-        run: npm run build:mac
+        run: |
+          if [ -n "$MAC_CERTIFICATE_P12_BASE64" ]; then
+            export CSC_LINK="$MAC_CERTIFICATE_P12_BASE64"
+            export CSC_KEY_PASSWORD="$MAC_CERTIFICATE_PASSWORD"
+          else
+            echo "No signing certificate defined, the app will be ad-hoc signed"
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          npm run build:mac
+        env:
+          MAC_CERTIFICATE_P12_BASE64: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Get tag name
         id: get-tag

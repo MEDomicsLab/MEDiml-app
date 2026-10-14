@@ -1,5 +1,6 @@
+import { app } from "electron"
 import MEDconfig, { PORT_FINDING_METHOD } from "../../medomics.dev"
-import { getPythonEnvironment, getBundledPythonEnvironment } from "./pythonEnv"
+import { getBundledPythonEnvironment, getPythonEnvironment } from "./pythonEnv"
 // The Go server is started with spawn, not execFile: execFile keeps all of its output in memory and
 // kills it once that output exceeds maxBuffer (1 MB), which long learning runs easily produce
 const { exec, spawn } = require("child_process")
@@ -111,7 +112,8 @@ export function killProcessOnPort(port) {
 
 export async function runServer(isProd, serverPort, serverProcess, serverState, condaPath = null) {
   // Runs the server
-  let pythonEnvironment = getPythonEnvironment()
+  // The python environment is not used on Windows
+  let pythonEnvironment = process.platform !== "win32" ? getPythonEnvironment() : undefined
   if (process.platform !== "win32" && condaPath === null) {
     condaPath = pythonEnvironment
     if (pythonEnvironment !== undefined) {
@@ -119,17 +121,17 @@ export async function runServer(isProd, serverPort, serverProcess, serverState, 
     }
   }
 
-  let env = process.env
+  // A copy, so the PATH of the app itself is not modified
+  let env = { ...process.env }
   let bundledPythonPath = getBundledPythonEnvironment()
 
   if (bundledPythonPath !== null) {
-    bundledPythonPath = bundledPythonPath.replace("python.exe", "")
-
-    let scriptPath = path.join(bundledPythonPath, "Scripts")
-    let libPath = path.join(bundledPythonPath, "Lib")
-    let pythonPath = path.join(bundledPythonPath, "python.exe")
-
-    env.PATH = `${bundledPythonPath};${scriptPath};${libPath};${env.PATH}`
+    // Folder of the python executable (".../python" on Windows, ".../python/bin" on macOS and Linux)
+    const pythonFolder = path.dirname(bundledPythonPath)
+    const pythonFolders = process.platform === "win32" ? [pythonFolder, path.join(pythonFolder, "Scripts"), path.join(pythonFolder, "Lib")] : [pythonFolder]
+    // path.delimiter is ";" on Windows and ":" elsewhere: joining with ";" on macOS merged the first system
+    // folder (/usr/bin) into an invalid entry, so the scripts could not run osascript to open the 3D viewer
+    env.PATH = [...pythonFolders, env.PATH].filter(Boolean).join(path.delimiter)
     console.log("env.PATH: " + env.PATH)
   }
 
@@ -176,6 +178,9 @@ export async function runServer(isProd, serverPort, serverProcess, serverState, 
       })
   } else {
     //**** PRODUCTION ****//
+    // The scripts write files in their working directory (e.g. pycaret's logs.log), but the working directory
+    // of a packaged app is not writable ("/" on macOS), so the server runs in the user data folder
+    const serverWorkingDirectory = app.getPath("userData")
     let args = [serverPort, "prod", process.resourcesPath]
     // Get the temporary directory path
     args.push(os.tmpdir())
@@ -197,12 +202,16 @@ export async function runServer(isProd, serverPort, serverProcess, serverState, 
           serverState.serverIsRunning = true
         } else if (process.platform == "linux") {
           serverProcess = spawn(path.join(process.resourcesPath, "go_executables/server_go_linux"), args, {
-            windowsHide: false
+            windowsHide: false,
+            env: env,
+            cwd: serverWorkingDirectory
           })
           serverState.serverIsRunning = true
         } else if (process.platform == "darwin") {
           serverProcess = spawn(path.join(process.resourcesPath, "go_executables/server_go_mac"), args, {
-            windowsHide: false
+            windowsHide: false,
+            env: env,
+            cwd: serverWorkingDirectory
           })
           serverState.serverIsRunning = true
         }

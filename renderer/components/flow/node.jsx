@@ -286,63 +286,37 @@ export const updateHasWarning = (data) => {
       data.internal.hasWarning = { state: true, tooltip: <p>Upload an image and link an input node</p> }
     }
   }
-  // Split node check if all the mandatory fields are filled
+  // Design node check if all the mandatory fields are filled
   if (data && data.setupParam && data.setupParam.type === "Design") {
     if (data.internal.settings.expName === "") {
       data.internal.hasWarning = { state: true, tooltip: <p>No experiment name is given!</p> }
       return
     }
   }
-  // Design node check if all the mandatory fields are filled
+  // Split node check if all the mandatory fields are filled
   if (data && data.setupParam && data.setupParam.type === "Split") {
-    if (data.internal.settings?.active_method?.[0]?.toLowerCase() === "cv"){
-      if (data.internal.settings.cv.nFolds === null || data.internal.settings.cv.nFolds === "") {
-        data.internal.hasWarning = { state: true, tooltip: <p>No number of folds is given!</p> }
-        return
-      } else if (data.internal.settings.cv.seed === null || data.internal.settings.cv.seed === ""){
-        data.internal.hasWarning = { state: true, tooltip: <p>No seed is given!</p> }
-        return
-      } else if (data.internal.settings.cv.nFolds < 2) {
-        data.internal.hasWarning = { state: true, tooltip: <p>Number of folds must be at least 2!</p> }
-        return
-      } else if (data.internal.settings.outcome_name === "") {
-      data.internal.hasWarning = { state: true, tooltip: <p>No outcome name is given!</p> }
-      return
-    } else if (data.internal.settings.path_outcome_file === "") {
-      data.internal.hasWarning = { state: true, tooltip: <p>No outcome file is given!</p> }
-      return
-    } else if (data.internal.settings.path_save_experiments === "") {
-      data.internal.hasWarning = { state: true, tooltip: <p>No save path is given!</p> }
-      return
-    } else {
-        data.internal.hasWarning = { state: false }
-        return
-      }
-    } else if (data.internal.settings?.active_method?.[0]?.toLowerCase() === "random"){
-      if (data.internal.settings.Random.nSplits === null || data.internal.settings.Random.nSplits === "") {
-        data.internal.hasWarning = { state: true, tooltip: <p>No number of splits is given!</p> }
-        return
-      } else if (data.internal.settings.Random.seed === null || data.internal.settings.Random.seed === ""){
-        data.internal.hasWarning = { state: true, tooltip: <p>No seed is given!</p> }
-        return
-      } else if (data.internal.settings.Random.nSplits < 2) {
-        data.internal.hasWarning = { state: true, tooltip: <p>Number of splits must be at least 2!</p> }
-        return
-      } else if (data.internal.settings.Random.testProportion === null || data.internal.settings.Random.testProportion === ""){
-        data.internal.hasWarning = { state: true, tooltip: <p>No test proportion is given!</p> }
-        return
-      } else if (data.internal.settings.Random.testProportion < 0 || data.internal.settings.Random.testProportion > 1){
-        data.internal.hasWarning = { state: true, tooltip: <p>Test proportion must be between 0 and 1!</p> }
-        return
-      } else {
-        data.internal.hasWarning = { state: false }
-        return
-      }
+    const settings = data.internal.settings
+    const isEmpty = (value) => value === null || value === undefined || value === ""
+    const setWarning = (message) => (data.internal.hasWarning = { state: true, tooltip: <p>{message}</p> })
+    const activeMethod = settings?.active_method?.[0]?.toLowerCase()
+    // The fields below are used by every split type (see split_node.py)
+    if (isEmpty(settings.outcome_name)) return setWarning("No outcome name is given!")
+    if (isEmpty(settings.path_ws_experiments)) return setWarning("No experiment's workspace folder is given!")
+    if (isEmpty(settings.path_outcome_file)) return setWarning("No outcome file is given!")
+    if (isEmpty(settings.path_save_experiments)) return setWarning("No save folder is given!")
+    if (activeMethod === "cv") {
+      if (isEmpty(settings.cv?.nFolds)) return setWarning("No number of folds is given!")
+      if (isEmpty(settings.cv?.seed)) return setWarning("No seed is given!")
+      if (settings.cv.nFolds < 2) return setWarning("Number of folds must be at least 2!")
+    } else if (activeMethod === "random") {
+      if (isEmpty(settings.Random?.nSplits)) return setWarning("No number of splits is given!")
+      if (isEmpty(settings.Random?.seed)) return setWarning("No seed is given!")
+      if (settings.Random.nSplits < 2) return setWarning("Number of splits must be at least 2!")
+      if (isEmpty(settings.Random?.testProportion)) return setWarning("No test proportion is given!")
+      if (settings.Random.testProportion < 0 || settings.Random.testProportion > 1) return setWarning("Test proportion must be between 0 and 1!")
     }
-    else {
-      data.internal.hasWarning = { state: false }
-      return
-    }
+    data.internal.hasWarning = { state: false }
+    return
   }
   // Data node check if all the mandatory fields are filled
   if (data && data.setupParam && data.setupParam.type === "Data") {

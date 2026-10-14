@@ -156,7 +156,7 @@ const HomePage = () => {
   useEffect(() => {
     ipcRenderer.invoke("checkRequirements").then((data) => {
       console.log("Requirements: ", data)
-      if (data.pythonInstalled && data.mongoDBInstalled) {
+      if (data.pythonInstalled && data.mongoDBInstalled && data.pythonRequirementsMet) {
         setRequirementsMet(true)
       } else {
         setRequirementsMet(false)
@@ -371,7 +371,7 @@ const HomePage = () => {
           </div>
         </div>
       </div>  
-      {!requirementsMet && process.platform !=="darwin" && <FirstSetupModal visible={!requirementsMet} closable={false} setRequirementsMet={setRequirementsMet} />}
+      {!requirementsMet && <FirstSetupModal visible={!requirementsMet} closable={false} setRequirementsMet={setRequirementsMet} />}
     </>
   )
 }

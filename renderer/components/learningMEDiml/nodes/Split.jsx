@@ -10,6 +10,14 @@ import { sectionCardClass } from '../../primitives/SectionCard';
 import { useMEDDataObjectsByType, useMEDDataStore } from "../../workspace/useMEDData";
 
 
+// The split types, the values are those of the active_method setting (see split_node.py)
+const SPLIT_TYPE_OPTIONS = [
+  { name: "Random", value: "Random" },
+  { name: "Institution", value: "Institution" },
+  { name: "Cross-Validation", value: "cv" }
+]
+const RANDOM_METHOD_OPTIONS = [{ name: "SubSampling", value: "SubSampling" }]
+
 /**
  * @param {string} id id of the node
  * @param {object} data data of the node
@@ -26,6 +34,7 @@ const Split = ({ id, data, type }) => {
   const [selectedWSFolder, setSelectedWSFolder] = useState(data.internal.settings.path_ws_experiments || "") // Selected workspace folder
   const [listCSVFiles, setListCSVFiles] = useState([]) // List of csv files in the workspace
   const [listWSFolders, setListWSFolders] = useState([]) // List of folders in the workspace
+  const [listsLoaded, setListsLoaded] = useState(false) // False until the workspace data is available
   const [reload, setReload] = useState(false)
   const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
   // Re-run the folder/csv list updates only when the set of directories/csv files actually
@@ -70,43 +79,83 @@ const Split = ({ id, data, type }) => {
       console.log("debug 2")
       data.setupParam.possibleSettings.defaultSettings.Random.nSplits = data.internal.settings.Random.nSplits
     }
-    updateWSfolder()
-    updateCSVFilesList()
+    updateLists()
     setReload(!reload)
   }, [])
-  
+
   useEffect(() => {
-    updateWSfolder()
-    updateCSVFilesList()
+    updateLists()
   }, [relevantIds])
 
-  const updateWSfolder = () => {
+  /**
+   * @description Updates the lists of folders and csv files of the workspace, then the warnings of the node
+   */
+  const updateLists = () => {
     const globalData = medDataStore.snapshot()
-    if (globalData !== undefined) {
-      let keys = Object.keys(globalData)
-      let wsFolders = []
-      keys.forEach((key) => {
-        if (globalData[key].type === "directory" && !globalData[key]?.path?.includes(".medomics") && !globalData[key]?.path?.includes(".mediml")) {
-          wsFolders.push({ name: globalData[key].name, value: globalData[key].path })
-        }
-      })
-      setListWSFolders(wsFolders)
+    if (globalData === undefined) return
+    let wsFolders = []
+    let csvFiles = []
+    Object.values(globalData).forEach((object) => {
+      if (object.type === "directory" && !object?.path?.includes(".medomics") && !object?.path?.includes(".mediml")) {
+        wsFolders.push({ name: object.name, value: object.path })
+      } else if (object.type === "csv") {
+        csvFiles.push({ name: object.name, value: object.path })
+      }
+    })
+    // The paths can only be checked once the workspace data is available
+    const loaded = Object.keys(globalData).length > 0
+    setListWSFolders(wsFolders)
+    setListCSVFiles(csvFiles)
+    setListsLoaded(loaded)
+    updateWarnings(wsFolders, csvFiles, loaded)
+  }
+
+  /**
+   * @param {String} path path saved in the settings
+   * @param {Array} options options of its dropdown
+   * @param {Boolean} loaded whether the workspace data is available
+   * @returns {Boolean} True if the path is set but is not in the workspace (e.g. it was moved, renamed or deleted, or
+   * the scene comes from another computer). Its dropdown can't display it, so it looks empty.
+   */
+  const isMissingFromWorkspace = (path, options = [], loaded = listsLoaded) => loaded && !!path && !options.some((option) => option.value === path)
+
+  /**
+   * @description Updates the warning of the node: the mandatory fields (see updateHasWarning), then the saved paths
+   * that are not in the workspace, which would otherwise look empty without any warning
+   */
+  const updateWarnings = (wsFolders = listWSFolders, csvFiles = listCSVFiles, loaded = listsLoaded) => {
+    updateHasWarning(data)
+    if (data.internal.hasWarning?.state) return
+    const settings = data.internal.settings
+    let message = null
+    if (isMissingFromWorkspace(settings.path_ws_experiments, wsFolders, loaded)) {
+      message = "The experiment's workspace folder was not found in the workspace, please select it again!"
+    } else if (isMissingFromWorkspace(settings.path_outcome_file, csvFiles, loaded)) {
+      message = "The outcomes CSV file was not found in the workspace, please select it again!"
+    } else if (isMissingFromWorkspace(settings.path_save_experiments, wsFolders, loaded)) {
+      message = "The save folder was not found in the workspace, please select it again!"
+    }
+    if (message) {
+      data.internal.hasWarning = { state: true, tooltip: <p>{message}</p> }
     }
   }
 
-  const updateCSVFilesList = () => {
-    const globalData = medDataStore.snapshot()
-    if (globalData !== undefined) {
-      let keys = Object.keys(globalData)
-      let csvFiles = []
-      keys.forEach((key) => {
-        if (globalData[key].type === "csv") {
-          csvFiles.push({ name: globalData[key].name, value: globalData[key].path })
-        }
-      })
-      setListCSVFiles(csvFiles)
-    }
-  }
+  /**
+   * @param {String} path path saved in the settings
+   * @param {Array} options options of its dropdown
+   * @returns {JSX.Element|null} A note under the dropdown when the saved path is not in the workspace
+   */
+  const missingPathNote = (path, options) =>
+    isMissingFromWorkspace(path, options) ? (
+      <Caption below warn>
+        Warning: not found in the workspace: {path}
+      </Caption>
+    ) : null
+
+  // Matched without case, as the scenes saved by older versions may store "random" or "CV"
+  const splitTypeValue = SPLIT_TYPE_OPTIONS.find(
+    (option) => option.value.toLowerCase() === data.setupParam.possibleSettings.defaultSettings.active_method?.[0]?.toLowerCase()
+  )?.value
 
   return (
     <>
@@ -135,7 +184,7 @@ const Split = ({ id, data, type }) => {
                     data.setupParam.possibleSettings.defaultSettings.outcome_name = event.target.value
                     data.internal.settings.outcome_name = event.target.value
                     // Update node warnings
-                    updateHasWarning(data)
+                    updateWarnings()
                     setReload(!reload)
                   }}
                 />
@@ -151,7 +200,7 @@ const Split = ({ id, data, type }) => {
                       data.setupParam.possibleSettings.defaultSettings.method = event.value ? 'random' : 'all_learn'
                       data.internal.settings.method = event.value ? 'random' : 'all_learn'
                       // Update node warnings
-                      updateHasWarning(data)
+                      updateWarnings()
                       setReload(!reload)
                     }}
                 />
@@ -170,7 +219,7 @@ const Split = ({ id, data, type }) => {
                         onValueChange={(event) => {
                           data.setupParam.possibleSettings.defaultSettings.holdoutPercentage = event.target.value
                           data.internal.settings.holdoutPercentage = event.target.value
-                          updateHasWarning(data)
+                          updateWarnings()
                           setReload(!reload)
                         }}
                         mode="decimal"
@@ -193,7 +242,7 @@ const Split = ({ id, data, type }) => {
                         onValueChange={(event) => {
                           data.setupParam.possibleSettings.defaultSettings.holdoutSeed = event.target.value
                           data.internal.settings.holdoutSeed = event.target.value
-                          updateHasWarning(data)
+                          updateWarnings()
                           setReload(!reload)
                         }}
                         mode="decimal"
@@ -219,7 +268,7 @@ const Split = ({ id, data, type }) => {
                       data.internal.settings.path_ws_experiments = e.value
                       setSelectedWSFolder(e.value)
                       // Update node warnings
-                      updateHasWarning(data)
+                      updateWarnings()
                       setReload(!reload)
                     }}
                     options={listWSFolders}
@@ -227,6 +276,7 @@ const Split = ({ id, data, type }) => {
                     display="chip"
                     placeholder="Select a folder"
                   />
+                  {missingPathNote(selectedWSFolder, listWSFolders)}
                 </Col>
               </Form.Group>
 
@@ -244,7 +294,7 @@ const Split = ({ id, data, type }) => {
                     data.internal.settings.path_outcome_file = e.value
                     setSelectedCSVFile(e.value)
                     // Update node warnings
-                    updateHasWarning(data)
+                    updateWarnings()
                     setReload(!reload)
                   }}
                   options={listCSVFiles}
@@ -252,6 +302,7 @@ const Split = ({ id, data, type }) => {
                   display="chip"
                   placeholder="Select a CSV file"
                 />
+                {missingPathNote(selectedCSVFile, listCSVFiles)}
               </Col>
               </Form.Group>
 
@@ -271,7 +322,7 @@ const Split = ({ id, data, type }) => {
                       data.internal.settings.path_save_experiments = e.value
                       setSelectedSaveFolder(e.value)
                       // Update node warnings
-                      updateHasWarning(data)
+                      updateWarnings()
                       setReload(!reload)
                     }}
                     options={listWSFolders}
@@ -279,6 +330,7 @@ const Split = ({ id, data, type }) => {
                     display="chip"
                     placeholder="Select a folder"
                   />
+                  {missingPathNote(selectedSaveFolder, listWSFolders)}
                 </Col>
               </Form.Group>
 
@@ -291,19 +343,15 @@ const Split = ({ id, data, type }) => {
               <Caption>Choose method for splitting data into sets.</Caption>
               <Dropdown 
                   style={{width: "300px"}}
-                  value={data.setupParam.possibleSettings.defaultSettings.active_method[0]}
-                  options={[{ name: 'Random' }, { name: 'Institution' }, { name: 'Cross-Validation' }]}
+                  value={splitTypeValue}
+                  options={SPLIT_TYPE_OPTIONS}
                   optionLabel="name" 
-                  placeholder={data.setupParam.possibleSettings.defaultSettings.active_method[0]}
+                  optionValue="value"
+                  placeholder="Select a split type"
                   onChange={(event) => {
-                    if (event.target.value.name === "Cross-Validation") {
-                      data.setupParam.possibleSettings.defaultSettings.active_method = ['cv'];
-                      data.internal.settings.active_method = ['cv'];
-                    } else {
-                      data.setupParam.possibleSettings.defaultSettings.active_method = [event.target.value.name];
-                      data.internal.settings.active_method = [event.target.value.name];
-                    }
-                    updateHasWarning(data);
+                    data.setupParam.possibleSettings.defaultSettings.active_method = [event.value];
+                    data.internal.settings.active_method = [event.value];
+                    updateWarnings();
                     setReload(!reload);
                   }} 
               />
@@ -322,13 +370,14 @@ const Split = ({ id, data, type }) => {
                 <Dropdown 
                     style={{width: "300px", margin: "0 auto"}}
                     value={data.setupParam.possibleSettings.defaultSettings.Random.method}
-                    options={[{ name: 'SubSampling' }]}
+                    options={RANDOM_METHOD_OPTIONS}
                     optionLabel="name" 
-                    placeholder={data.setupParam.possibleSettings.defaultSettings.Random.method}
+                    optionValue="value"
+                    placeholder="Select a split method"
                     onChange={(event) => {
-                      data.setupParam.possibleSettings.defaultSettings.Random.method = event.target.value.name;
-                      data.internal.settings.Random.method = event.target.value.name;
-                      updateHasWarning(data);
+                      data.setupParam.possibleSettings.defaultSettings.Random.method = event.value;
+                      data.internal.settings.Random.method = event.value;
+                      updateWarnings();
                       setReload(!reload);
                     }} 
                         />
@@ -348,7 +397,7 @@ const Split = ({ id, data, type }) => {
                     onValueChange={(event) => {
                       data.setupParam.possibleSettings.defaultSettings.Random.nSplits = event.target.value;
                       data.internal.settings.Random.nSplits = event.target.value;
-                      updateHasWarning(data);
+                      updateWarnings();
                       setReload(!reload);
                     }}
                     mode="decimal"
@@ -373,7 +422,7 @@ const Split = ({ id, data, type }) => {
                     onChange={(event) => {
                         data.setupParam.possibleSettings.defaultSettings.Random.stratifyInstitutions = event.target.value;
                         data.internal.settings.Random.stratifyInstitutions = event.target.value;
-                        updateHasWarning(data);
+                        updateWarnings();
                         setReload(!reload);
                     }}
                 />
@@ -393,7 +442,7 @@ const Split = ({ id, data, type }) => {
                     onValueChange={(event) => {
                         data.setupParam.possibleSettings.defaultSettings.Random.testProportion = event.target.value;
                         data.internal.settings.Random.testProportion = event.target.value;
-                        updateHasWarning(data);
+                        updateWarnings();
                         setReload(!reload);
                     } }
                     mode="decimal"
@@ -418,7 +467,7 @@ const Split = ({ id, data, type }) => {
                     onValueChange={(event) => {
                         data.setupParam.possibleSettings.defaultSettings.Random.seed = event.target.value;
                         data.internal.settings.Random.seed = event.target.value;
-                        updateHasWarning(data);
+                        updateWarnings();
                         setReload(!reload);
                     } }
                     mode="decimal"
@@ -443,7 +492,7 @@ const Split = ({ id, data, type }) => {
                     onValueChange={(event) => {
                       data.setupParam.possibleSettings.defaultSettings.cv.nFolds = event.target.value;
                       data.internal.settings.cv.nFolds = event.target.value;
-                      updateHasWarning(data);
+                      updateWarnings();
                       setReload(!reload);
                     }}
                     mode="decimal"
@@ -466,7 +515,7 @@ const Split = ({ id, data, type }) => {
                     onValueChange={(event) => {
                         data.setupParam.possibleSettings.defaultSettings.cv.seed = event.target.value;
                         data.internal.settings.cv.seed = event.target.value;
-                        updateHasWarning(data);
+                        updateWarnings();
                         setReload(!reload);
                     } }
                     mode="decimal"
