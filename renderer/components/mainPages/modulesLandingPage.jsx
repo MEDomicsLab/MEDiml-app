@@ -289,8 +289,8 @@ export default function ModulesLandingPage() {
       infoContent={
         <ModuleGuideText>
           <p className="mb-0">
-            MEDiml offers two central modules: one for radiomic features extraction and another for machine learning. 
-            The Extraction Module allows you to easily extract radiomic features from your medical images, 
+            MEDiml offers two central modules: one for exploratory radiomic feature extraction and another for machine learning. 
+            The Extraction Module allows you to explore the impact of different preprocessing and extraction parameters on the radiomic features derived from your medical images, 
             while the Learning Module enables model training, testing, and explanation of your model's predictions. 
             Create a new scene to get started!
           </p>
@@ -318,8 +318,7 @@ export default function ModulesLandingPage() {
           <Card.Body className="d-flex flex-column justify-content-center align-items-center p-4">
             <Pickaxe width={120} height={120} color="#3269ce"/>
             <Card.Text className="mt-3 text-center">
-              Extract radiomics features from your medical images and create comprehensive 
-              datasets for your machine learning projects.
+              Explore the impact of different preprocessing and extraction parameters on the radiomic features derived from your medical images before bacth analysis.
             </Card.Text>
             <div 
               className="p-inputgroup w-full my-3"
