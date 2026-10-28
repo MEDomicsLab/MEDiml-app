@@ -175,49 +175,6 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
 
   const fs = require('fs');
 
-  const handleReadFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      }
-      setSelectedReadFolder(fileList)
-    }
-    else {
-      setSelectedReadFolder(event.target.files.path)
-    }
-  };
-
-  const handleSaveFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      }
-      setSelectedSaveFolder(fileList)
-    }
-    else {
-      setSelectedSaveFolder(event.target.files.path)
-    }
-  };
-
   const handleNBatchChange = (event) => {
     const n_batch = event.target.value;
     setSelectedNBatch(parseInt(n_batch));
@@ -688,7 +645,7 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
               name="pred_doses_csv"
               options={listCSVFiles}
               value={selectedPredDosesCSV}
-              onWorkspaceChange={setSelectedPredDosesCSV}
+              onPathChange={setSelectedPredDosesCSV}
               onLocalChange={handlePredDosesCSVChange}
               placeholder="Select a file"
             />
@@ -745,8 +702,7 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
           name="path_read"
           options={listWSFolders}
           value={selectedReadFolder}
-          onWorkspaceChange={setSelectedReadFolder}
-          onLocalChange={handleReadFolderChange}
+          onPathChange={setSelectedReadFolder}
         />
       </SectionCard>
 
@@ -764,7 +720,7 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
           name="path_params"
           options={listSettingsFiles}
           value={selectedSettingsFile}
-          onWorkspaceChange={setSelectedSettingsFile}
+          onPathChange={setSelectedSettingsFile}
           onLocalChange={handleSettingsFileChange}
           placeholder="Select a file"
           action={
@@ -801,7 +757,7 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
             name="path_csv"
             options={listCSVFiles}
             value={selectedCSVFile}
-            onWorkspaceChange={setSelectedCSVFile}
+            onPathChange={setSelectedCSVFile}
             onLocalChange={handleCSVFileChange}
             inputRef={csvFileInputRef}
             showClear
@@ -835,13 +791,7 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
             name="path_save"
             options={listWSFolders}
             value={selectedSaveFolder}
-            onWorkspaceChange={setSelectedSaveFolder}
-            onLocalChange={handleSaveFolderChange}
-            caption={
-              <Caption warn>
-                Warning: to select a folder, it must contain at least one file, even if it is empty.
-              </Caption>
-            }
+            onPathChange={setSelectedSaveFolder}
           />
         </SectionCard>
 
@@ -961,7 +911,7 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
             name="categorize_csv"
             options={listCSVFiles}
             value={categorizeCSVFile}
-            onWorkspaceChange={selectCategorizeCSV}
+            onPathChange={selectCategorizeCSV}
             onLocalChange={handleCategorizeCSVChange}
             placeholder="Select a file"
           />
@@ -979,7 +929,7 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
             name="categorize_txt"
             options={listTXTFiles}
             value={categorizeTXTFile}
-            onWorkspaceChange={(path) => {
+            onPathChange={(path) => {
               setCategorizeTXTFile(path)
               setCategorizeResults(null)
             }}

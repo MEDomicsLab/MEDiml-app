@@ -18,6 +18,7 @@ import DocLink from "../extractionMEDiml/docLink"
 import SourcePicker from "../extractionMEDiml/SourcePicker"
 import { ErrorRequestContext } from "../generalPurpose/errorRequestContext"
 import Caption from "../primitives/Caption"
+import Disclosure from "../primitives/Disclosure"
 import Field from "../primitives/Field"
 import ParamGrid from "../primitives/ParamGrid"
 import SectionCard from "../primitives/SectionCard"
@@ -49,6 +50,8 @@ const PRECHECK_DATASET = {
   }
 }
 
+const DEFAULT_N_CORES = 12
+
 /**
  * @param {Object} nodeForm form associated to the discretization node
  * @param {object} data data of the node
@@ -77,7 +80,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
   const [selectedSaveFolder, setSelectedSaveFolder] = useState('')
   const [selectedSavePreChecksFolder, setSelectedSavePreChecksFolder] = useState('')
   const [selectedNpyFolder, setSelectedNpyFolder] = useState('')
-  const [selectedNBatch, setSelectedNBatch] = useState(4)
+  const [selectedNBatch, setSelectedNBatch] = useState(DEFAULT_N_CORES)
   const [selectedCSVFile, setSelectedCSVFile] = useState('')
   const [selectedPreChecksOptions, setSelectedPreChecksOptions] = useState(null)
   const [selectedInstitutions, setSelectedInstitutions] = useState([])
@@ -134,92 +137,6 @@ const DataManager = ({ pageId, configPath = "" }) => {
         }
       })
       setListCSVFiles(csvFiles)
-    }
-  }
-
-  const handleDcmFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      }
-      setSelectedDcmFolder(fileList)
-    }
-    else {
-      setSelectedDcmFolder(event.target.files.path)
-    }
-  };
-
-
-  const handleDatasetFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      }
-      setSelectedDatasetFolder(fileList)
-    }
-    else {
-      setSelectedDatasetFolder(event.target.files.path)
-    }
-  };
-
-  const handleSaveFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      }
-      setSelectedSaveFolder(fileList)
-    }
-    else {
-      setSelectedSaveFolder(event.target.files.path)
-    }
-  }
-
-  const handleChecksSaveFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      }
-      setSelectedSavePreChecksFolder(fileList)
-    }
-    else {
-      setSelectedSavePreChecksFolder(event.target.files.path)
     }
   }
 
@@ -824,8 +741,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
             name="pathDicoms"
             options={listWSFolders}
             value={selectedDcmFolder}
-            onWorkspaceChange={setSelectedDcmFolder}
-            onLocalChange={handleDcmFolderChange}
+            onPathChange={setSelectedDcmFolder}
           />
         </SectionCard>
 
@@ -842,8 +758,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
             name="pathNiftis"
             options={listWSFolders}
             value={selectedNiftiFolder}
-            onWorkspaceChange={setSelectedNiftiFolder}
-            onLocalChange={handleDatasetFolderChange}
+            onPathChange={setSelectedNiftiFolder}
           />
         </SectionCard>
 
@@ -859,27 +774,32 @@ const DataManager = ({ pageId, configPath = "" }) => {
             name="pathSave"
             options={listWSFolders}
             value={selectedSaveFolder}
-            onWorkspaceChange={setSelectedSaveFolder}
-            onLocalChange={handleSaveFolderChange}
+            onPathChange={setSelectedSaveFolder}
             placeholder="Select a folder"
           />
         </SectionCard>
 
-        {/* NUMBER OF BATCH*/}
-        <SectionCard
-          row
-          align="center"
-          title="Cores"
-          hint="Number of CPU cores used for the parallel conversion."
+        {/* NUMBER OF BATCH */}
+        <Disclosure
+          title="Advanced"
+          modifiedCount={selectedNBatch !== DEFAULT_N_CORES ? 1 : 0}
         >
-          <Form.Control
-            name="nBatch"
-            type="number"
-            defaultValue={12}
-            placeholder={"Default: " + 12}
-            onChange={handleNBatchChange}
-          />
-        </SectionCard>
+          <SectionCard
+            row
+            align="center"
+            title="Cores"
+            hint="Number of CPU cores used for the parallel conversion."
+          >
+            <Form.Control
+              name="nBatch"
+              type="number"
+              defaultValue={DEFAULT_N_CORES}
+              placeholder={"Default: " + DEFAULT_N_CORES}
+              onChange={handleNBatchChange}
+              aria-label="Number of cores"
+            />
+          </SectionCard>
+        </Disclosure>
       </Form>
 
       {/* PROCESS BUTTON*/}
@@ -1008,7 +928,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
             name="pathCSV"
             options={listCSVFiles}
             value={selectedCSVFile}
-            onWorkspaceChange={setSelectedCSVFile}
+            onPathChange={setSelectedCSVFile}
             onLocalChange={handleCSVFileChange}
             inputRef={csvFileInputRef}
             showClear
@@ -1043,8 +963,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
             name="pathNpy"
             options={listWSFolders}
             value={selectedNpyFolder}
-            onWorkspaceChange={handleNpyFolderChange}
-            onLocalChange={handleDatasetFolderChange}
+            onPathChange={handleNpyFolderChange}
           />
         </SectionCard>
 
@@ -1060,8 +979,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
             name="pathSave"
             options={listWSFolders}
             value={selectedSavePreChecksFolder}
-            onWorkspaceChange={setSelectedSavePreChecksFolder}
-            onLocalChange={handleChecksSaveFolderChange}
+            onPathChange={setSelectedSavePreChecksFolder}
           />
         </SectionCard>
 

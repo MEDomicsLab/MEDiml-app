@@ -1,35 +1,20 @@
+import { ipcRenderer } from "electron"
 import { Dropdown } from "primereact/dropdown"
 import { useId } from "react"
-import { Form } from "react-bootstrap"
+import { Button, Form, InputGroup } from "react-bootstrap"
 
 /**
  * Picks a folder or file either from the workspace or from disk.
  *
- * Replaces the `useWorkspace ? <Dropdown> : <Form.Control type="file">` branch
- * that appeared eight times across DataManager and BatchExtractor, each copy
- * carrying the same inline `{maxWidth, height, width}` object and -- a real
- * defect -- `controlId="enterFile"`, the SAME DOM id at eight sites on one page.
- * The id is generated per instance here.
- *
- * It renders no <form>. Both pages already wrap cards in a <Form>, and a nested
- * form is silently dropped by the HTML parser.
- *
- * It sets no width either: the enclosing ParamGrid track owns that.
- *
- * NOTE ON THE TWO CALLBACKS: `onLocalChange` receives the raw DOM event and is
- * passed straight to the page's existing handler, because the path-derivation
- * logic those handlers contain is Windows-specific and is being consolidated
- * separately -- moving layout and path parsing in one change would make a
- * regression in either hard to bisect.
- *
  * @param {"workspace"|"local"} mode Which input to render.
- * @param {"folder"|"file"} kind Folder picker (webkitdirectory) or file picker.
+ * @param {"folder"|"file"} kind Folder picker (native dialog) or file picker.
  * @param {string} accept File-type filter, local + kind="file" only.
  * @param {string} name Form control name, kept for the existing handlers.
  * @param {Array} options Workspace entries, `{name, value}`.
- * @param {string} value Current value (workspace mode).
- * @param {Function} onWorkspaceChange Receives the selected path string.
- * @param {Function} onLocalChange Receives the raw change event.
+ * @param {string} value Current path (workspace mode, and local folders).
+ * @param {Function} onPathChange Receives the selected path string: workspace
+ *   entries, and local folders.
+ * @param {Function} onLocalChange Receives the raw change event of a local file.
  * @param {string} placeholder Dropdown placeholder.
  * @param {boolean} showClear Allow clearing the dropdown (optional values).
  * @param {object} inputRef Ref to the local file input, so a Clear button can
@@ -44,7 +29,7 @@ const SourcePicker = ({
   name,
   options = [],
   value,
-  onWorkspaceChange,
+  onPathChange,
   onLocalChange,
   placeholder = "Select a folder",
   showClear = false,
@@ -62,13 +47,43 @@ const SourcePicker = ({
           filter
           showClear={showClear}
           value={value}
-          onChange={(e) => onWorkspaceChange(e.value || "")}
+          onChange={(e) => onPathChange(e.value || "")}
           options={options}
           optionLabel="name"
           display="chip"
           placeholder={placeholder}
           {...rest}
         />
+        {action}
+      </>
+    )
+  }
+
+  if (kind === "folder") {
+    const pickFolder = async () => {
+      const { canceled, filePaths } = await ipcRenderer.invoke("select-folder-path")
+      if (!canceled && filePaths.length > 0) {
+        onPathChange(filePaths[0])
+      }
+    }
+
+    return (
+      <>
+        {caption}
+        <InputGroup>
+          <Button variant="outline-secondary" onClick={pickFolder}>
+            Browse...
+          </Button>
+          <Form.Control
+            id={controlId}
+            name={name}
+            readOnly
+            value={value || ""}
+            placeholder="No folder selected"
+            title={value || ""}
+            onClick={pickFolder}
+          />
+        </InputGroup>
         {action}
       </>
     )
@@ -84,7 +99,6 @@ const SourcePicker = ({
           accept={accept}
           ref={inputRef}
           onChange={onLocalChange}
-          {...(kind === "folder" ? { webkitdirectory: "true", directory: "true" } : {})}
         />
       </Form.Group>
       {action}
