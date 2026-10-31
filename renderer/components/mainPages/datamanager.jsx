@@ -50,6 +50,23 @@ const PRECHECK_DATASET = {
   }
 }
 
+/**
+ * Label, hint and documentation link for the dataset folder to process, by
+ * on-disk format.
+ */
+const PROCESS_DATASET = {
+  dicom: {
+    label: "DICOM dataset folder",
+    hint: "Folder holding the DICOM study you want to convert into MEDscan objects. MEDiml expects the standard layout, one folder per patient and one sub-folder per imaging scan.",
+    doc: MEDIML_DOCS.inputDataDicom
+  },
+  nifti: {
+    label: "NIfTI dataset folder",
+    hint: "Folder holding the NIfTI files to convert. File names must follow the MEDiml convention, PatientID__ImagingScanName(ROIname).Modality.nii.gz, so scans and their masks can be paired.",
+    doc: MEDIML_DOCS.inputDataNifti
+  }
+}
+
 const DEFAULT_N_CORES = 12
 
 /**
@@ -99,6 +116,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
   const [runVoxelChecks, setRunVoxelChecks] = useState(true) // Voxel (dimensions) pre-checks
   const [runWindowChecks, setRunWindowChecks] = useState(true) // Window (intensity) pre-checks
   const [useDatasetType, setUseDatasetType] = useState("npy") // Dataset format for pre-checks: npy, nifti, or dicom
+  const [processDatasetType, setProcessDatasetType] = useState("dicom") // Dataset format to process: dicom or nifti
   const [isScanningNpyFolder, setIsScanningNpyFolder] = useState(false)
   const csvFileInputRef = useRef(null) // Used to reset the local ROI CSV file input, since the file is optional
 
@@ -428,6 +446,32 @@ const DataManager = ({ pageId, configPath = "" }) => {
     });
   }
 
+  // The one folder input of the Process card shows the path of the selected format
+  const processFolder = processDatasetType === "dicom" ? selectedDcmFolder : selectedNiftiFolder
+
+  /**
+   * @description Stores the dataset folder to process under its format, and clears the other
+   * format's folder, so the request never carries a DICOM and a NIfTI folder at once.
+   * @param {string} format - The dataset format, "dicom" or "nifti"
+   * @param {string} path - The path of the dataset folder
+   */
+  const setProcessFolder = (format, path) => {
+    setSelectedDcmFolder(format === "dicom" ? path : '')
+    setSelectedNiftiFolder(format === "nifti" ? path : '')
+  }
+
+  /**
+   * @description Changes the format of the dataset to process, keeping the selected folder.
+   * @param {string} format - The new dataset format, null when the active option is clicked again
+   */
+  const handleProcessDatasetTypeChange = (format) => {
+    if (!format) {
+      return
+    }
+    setProcessFolder(format, processFolder)
+    setProcessDatasetType(format)
+  }
+
   /**
    * @description Handles the click on the process button of the DICOM or NIfTI data.
   */
@@ -728,37 +772,39 @@ const DataManager = ({ pageId, configPath = "" }) => {
         />
       </SectionCard>
 
-      {/* UPLOAD DICOM DATASET FOLDER*/}
+      {/* DATASET FORMAT */}
         <SectionCard
           row
-          title="DICOM dataset folder"
-          hint="Folder holding the DICOM study you want to convert into MEDscan objects. MEDiml expects the standard layout, one folder per patient and one sub-folder per imaging scan."
-          docHref={MEDIML_DOCS.inputDataDicom}
+          align="center"
+          title="Dataset format"
+          hint="Which on-disk format the scans to process are in."
+          docHref={MEDIML_DOCS.inputData}
         >
-          <SourcePicker
-            mode={useWorkspace ? "workspace" : "local"}
-            kind="folder"
-            name="pathDicoms"
-            options={listWSFolders}
-            value={selectedDcmFolder}
-            onPathChange={setSelectedDcmFolder}
+          <SelectButton
+            value={processDatasetType}
+            onChange={(e) => handleProcessDatasetTypeChange(e.value)}
+            optionLabel="label"
+            options={[
+              { label: 'DICOM', value: "dicom" },
+              { label: 'NIfTI', value: "nifti" }
+            ]}
           />
         </SectionCard>
 
-        {/* UPLOAD NIfTI DATASET FOLDER*/}
+      {/* UPLOAD DATASET FOLDER */}
         <SectionCard
           row
-          title="NIfTI dataset folder"
-          hint="Folder holding the NIfTI files to convert. File names must follow the MEDiml convention, PatientID__ImagingScanName(ROIname).Modality.nii.gz, so scans and their masks can be paired."
-          docHref={MEDIML_DOCS.inputDataNifti}
+          title={PROCESS_DATASET[processDatasetType].label}
+          hint={PROCESS_DATASET[processDatasetType].hint}
+          docHref={PROCESS_DATASET[processDatasetType].doc}
         >
           <SourcePicker
             mode={useWorkspace ? "workspace" : "local"}
             kind="folder"
-            name="pathNiftis"
+            name={processDatasetType === "dicom" ? "pathDicoms" : "pathNiftis"}
             options={listWSFolders}
-            value={selectedNiftiFolder}
-            onPathChange={setSelectedNiftiFolder}
+            value={processFolder}
+            onPathChange={(path) => setProcessFolder(processDatasetType, path)}
           />
         </SectionCard>
 
@@ -809,7 +855,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
           label="Process"
           name="ProcessButton"
           onClick={handleProcessClick}
-          disabled={(!selectedDcmFolder || !selectedSaveFolder || refreshEnabled) && (!selectedNiftiFolder || !selectedSaveFolder)}
+          disabled={!processFolder || !selectedSaveFolder || refreshEnabled}
           icon="pi pi-wrench"
           raised
           rounded
