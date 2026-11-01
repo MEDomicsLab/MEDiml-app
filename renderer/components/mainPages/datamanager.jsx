@@ -1076,7 +1076,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
               aria-label="Modalities"
             />
             <InputText
-              placeholder="Custom wildcard"
+              placeholder="Custom wildcard (e.g., *CECT*)"
               onChange={(e) => setCustomWildCard(e.target.value)}
               aria-label="Custom wildcard"
             />
@@ -1087,14 +1087,16 @@ const DataManager = ({ pageId, configPath = "" }) => {
             title="Check types"
             hint="Which pre-checks to run. Voxel checks report the dimension ranges in the dataset; window checks report the intensity ranges. Both are on by default."
           >
-            <Field inline label="Voxel checks (dimensions)">
+            <Field leading label="Voxel checks (dimensions)" htmlFor="precheck-voxel">
               <InputSwitch
+                inputId="precheck-voxel"
                 checked={runVoxelChecks}
                 onChange={(e) => setRunVoxelChecks(e.value)}
               />
             </Field>
-            <Field inline label="Window checks (intensity)">
+            <Field leading label="Window checks (intensity)" htmlFor="precheck-window">
               <InputSwitch
+                inputId="precheck-window"
                 checked={runWindowChecks}
                 onChange={(e) => setRunWindowChecks(e.value)}
               />
