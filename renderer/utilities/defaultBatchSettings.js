@@ -68,7 +68,7 @@ const defaultBatchSettings = {
         roi_pv : 0.5
         },
         reSeg : {
-        range : [-1000,400],
+        range : [-100, 300],
         outliers : ""
         },
         discretisation : {

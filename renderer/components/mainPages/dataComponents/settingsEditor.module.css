@@ -1,0 +1,97 @@
+/* Extraction settings editor -- see settingsEditor.jsx.
+
+   Every parameter is one <Param> row: label and description on the left, the
+   control on the right in a fixed-width column, so controls line up down the
+   whole panel whatever the label length. Rows are separated by a hairline. */
+
+.intro {
+  margin-block-end: var(--med-space-2);
+}
+
+/* Rows inside a card or an Advanced group. */
+.rows > * + * {
+  margin-block-start: var(--med-space-3);
+  padding-block-start: var(--med-space-3);
+  border-block-start: 1px solid var(--med-border-subtle);
+}
+
+/* The control column. One width for every control in the panel. */
+.control {
+  width: 18rem;
+  max-width: 100%;
+}
+
+.control :global(.p-inputnumber),
+.control :global(.p-dropdown),
+.control :global(.p-inputtext) {
+  width: 100%;
+}
+
+.control :global(.p-inputnumber-input) {
+  width: 100%;
+  min-width: 0;
+}
+
+/* X / Y / Z, or the three Laws kernels / wavelet sub-bands. */
+.triple {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--med-space-2);
+}
+
+/* Two controls that belong together: algorithm and value, number and limit. */
+.pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--med-space-2);
+  align-items: center;
+}
+
+/* A pair with a remove button, for list entries. */
+.pairRemovable {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: var(--med-space-1);
+  align-items: center;
+}
+
+/* A switch with its own short label ("No limit"). */
+.switchLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--med-space-2);
+  font-size: var(--med-text-sm);
+  color: var(--med-text-secondary);
+}
+
+/* "Add ..." under a list of rows. */
+.addRow {
+  margin-block-start: var(--med-space-2);
+}
+
+/* Heading of a group of rows inside the Advanced section. */
+.groupTitle {
+  margin: var(--med-space-4) 0 var(--med-space-2);
+  font-size: var(--med-text-base);
+  font-weight: 600;
+  color: var(--med-text-primary);
+}
+
+.groupTitle:first-child {
+  margin-block-start: var(--med-space-1);
+}
+
+/* Tabs carry no surface or padding of their own, so the cards inside them are
+   exactly as wide as the General card above. */
+.tabs :global(.p-tabview-nav) {
+  background: none;
+}
+
+.tabs :global(.p-tabview-panels) {
+  padding: 0;
+  background: none;
+}
+
+.docLink {
+  margin-block-start: var(--med-space-3);
+}

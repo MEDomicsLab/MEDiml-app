@@ -42,6 +42,24 @@
   flex: 0 0 auto;
 }
 
+/* Control first, label right after it, both at their content width, so a
+   switch always sits against its own label. With .inline the label grows
+   across the grid track and, when two switches share a card, each switch ends
+   up nearer the neighbouring label than its own. */
+.leading {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--med-space-2);
+}
+
+.leading > .control {
+  flex: 0 0 auto;
+}
+
+.leading > .labelBlock {
+  flex: 0 1 auto;
+}
+
 .labelRow {
   display: flex;
   align-items: center;
@@ -60,6 +78,11 @@
 
 .disabled {
   color: var(--med-text-disabled);
+}
+
+/* The label toggles its control (htmlFor), so it should look clickable. */
+.leading .label {
+  cursor: pointer;
 }
 
 /* .badge, .infoToggle, .infoIcon, .infoPanel and .docLink moved to

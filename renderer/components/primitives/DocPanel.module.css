@@ -1,0 +1,143 @@
+/* DocPanel -- in-app documentation docked on the right. See DocPanel.jsx.
+
+   The frame (position, header, close button) is SidePanel.module.css. The
+   `.content` rules here style plain semantic markup, so a documentation
+   component (renderer/components/docs/) needs no stylesheet of its own and
+   looks the same wherever it is opened. */
+
+/* ---- Documentation typography ------------------------------------------ */
+
+.content {
+  font-size: var(--med-text-base);
+  line-height: var(--med-leading-body);
+  text-align: start;
+}
+
+.content > :first-child {
+  margin-top: 0;
+}
+
+.content h3 {
+  margin: var(--med-space-5) 0 var(--med-space-2);
+  font-size: var(--med-text-lg);
+  font-weight: 600;
+  line-height: var(--med-leading-tight);
+}
+
+.content p,
+.content ul,
+.content ol {
+  margin: 0 0 var(--med-space-3);
+}
+
+.content ul,
+.content ol {
+  padding-inline-start: var(--med-space-5);
+}
+
+.content li + li {
+  margin-top: var(--med-space-1);
+}
+
+.content code {
+  font-family: var(--med-font-mono);
+  font-size: var(--med-text-sm);
+  background-color: var(--med-surface-sunken);
+  border-radius: var(--med-radius-sm);
+  padding: 0 var(--med-space-1);
+  overflow-wrap: anywhere;
+}
+
+/* Multi-line literals: folder trees, commands. Scrolls sideways rather than
+   wrapping, since a wrapped tree no longer shows its structure. */
+.content pre {
+  margin: 0 0 var(--med-space-3);
+  padding: var(--med-space-2) var(--med-space-3);
+  overflow-x: auto;
+  font-family: var(--med-font-mono);
+  font-size: var(--med-text-xs);
+  line-height: var(--med-leading-tight);
+  background-color: var(--med-surface-sunken);
+  border-radius: var(--med-radius-sm);
+}
+
+.content pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+
+/* Tabs, for content with one alternative per option (e.g. per dataset format).
+   Keyed on the WAI-ARIA roles so content components stay stylesheet-free. */
+.content [role="tablist"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--med-space-1);
+  margin: var(--med-space-5) 0 var(--med-space-3);
+  border-block-end: 1px solid var(--med-border-subtle);
+}
+
+.content [role="tab"] {
+  margin-block-end: -1px;
+  padding: var(--med-space-2) var(--med-space-3);
+  border: none;
+  border-block-end: 2px solid transparent;
+  background: none;
+  color: var(--med-text-secondary);
+  font-size: var(--med-text-base);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.content [role="tab"]:hover {
+  color: var(--med-text-primary);
+}
+
+.content [role="tab"][aria-selected="true"] {
+  border-block-end-color: var(--med-accent);
+  color: var(--med-text-primary);
+}
+
+.content [role="tab"]:focus-visible {
+  outline: 2px solid var(--med-accent);
+  outline-offset: -2px;
+}
+
+.content [role="tabpanel"] > :first-child {
+  margin-top: 0;
+}
+
+/* Term / definition lists: glossaries and feature lists. */
+.content dl {
+  margin: 0 0 var(--med-space-3);
+}
+
+.content dt {
+  font-weight: 600;
+}
+
+.content dd {
+  margin: 0 0 var(--med-space-3);
+  color: var(--med-text-secondary);
+}
+
+/* Unit or category shown beside a term, e.g. "Gy". */
+.content dt small {
+  margin-inline-start: var(--med-space-2);
+  font-size: var(--med-text-xs);
+  font-weight: 500;
+  color: var(--med-text-secondary);
+}
+
+/* A short callout: prerequisites, caveats. */
+.content aside {
+  margin: 0 0 var(--med-space-3);
+  padding: var(--med-space-2) var(--med-space-3);
+  border-inline-start: 3px solid var(--med-status-info);
+  border-radius: var(--med-radius-sm);
+  background-color: var(--med-surface-sunken);
+}
+
+.content aside > :last-child {
+  margin-bottom: 0;
+}

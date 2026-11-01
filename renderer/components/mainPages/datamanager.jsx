@@ -14,10 +14,13 @@ import Zoom from "yet-another-react-lightbox/plugins/zoom"
 import "yet-another-react-lightbox/styles.css"
 import MEDIML_DOCS from "../../utilities/medimlDocs"
 import { requestBackend } from "../../utilities/requests"
+import InputDataDoc, { INPUT_DATA_DOC_TITLE } from "../docs/InputDataDoc"
+import RoiCsvDoc, { ROI_CSV_DOC_TITLE } from "../docs/RoiCsvDoc"
 import DocLink from "../extractionMEDiml/docLink"
 import SourcePicker from "../extractionMEDiml/SourcePicker"
 import { ErrorRequestContext } from "../generalPurpose/errorRequestContext"
 import Caption from "../primitives/Caption"
+import Disclosure from "../primitives/Disclosure"
 import Field from "../primitives/Field"
 import ParamGrid from "../primitives/ParamGrid"
 import SectionCard from "../primitives/SectionCard"
@@ -50,6 +53,25 @@ const PRECHECK_DATASET = {
 }
 
 /**
+ * Label, hint and documentation link for the dataset folder to process, by
+ * on-disk format.
+ */
+const PROCESS_DATASET = {
+  dicom: {
+    label: "DICOM dataset folder",
+    hint: "Folder holding the DICOM study you want to convert into MEDscan objects. MEDiml expects the standard layout, one folder per patient and one sub-folder per imaging scan.",
+    doc: MEDIML_DOCS.inputDataDicom
+  },
+  nifti: {
+    label: "NIfTI dataset folder",
+    hint: "Folder holding the NIfTI files to convert. File names must follow the MEDiml convention, PatientID__ImagingScanName(ROIname).Modality.nii.gz, so scans and their masks can be paired.",
+    doc: MEDIML_DOCS.inputDataNifti
+  }
+}
+
+const DEFAULT_N_CORES = 12
+
+/**
  * @param {Object} nodeForm form associated to the discretization node
  * @param {object} data data of the node
  * @param {Function} changeNodeForm function to change the node form
@@ -77,7 +99,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
   const [selectedSaveFolder, setSelectedSaveFolder] = useState('')
   const [selectedSavePreChecksFolder, setSelectedSavePreChecksFolder] = useState('')
   const [selectedNpyFolder, setSelectedNpyFolder] = useState('')
-  const [selectedNBatch, setSelectedNBatch] = useState(4)
+  const [selectedNBatch, setSelectedNBatch] = useState(DEFAULT_N_CORES)
   const [selectedCSVFile, setSelectedCSVFile] = useState('')
   const [selectedPreChecksOptions, setSelectedPreChecksOptions] = useState(null)
   const [selectedInstitutions, setSelectedInstitutions] = useState([])
@@ -95,7 +117,8 @@ const DataManager = ({ pageId, configPath = "" }) => {
   const [useWorkspacePC, setUseWorkspacePC] = useState(false) // A boolean variable to control the use of the workspace for pre-checks
   const [runVoxelChecks, setRunVoxelChecks] = useState(true) // Voxel (dimensions) pre-checks
   const [runWindowChecks, setRunWindowChecks] = useState(true) // Window (intensity) pre-checks
-  const [useDatasetType, setUseDatasetType] = useState("npy") // Dataset format for pre-checks: npy, nifti, or dicom
+  const [useDatasetType, setUseDatasetType] = useState("dicom") // Dataset format for pre-checks: npy, nifti, or dicom
+  const [processDatasetType, setProcessDatasetType] = useState("dicom") // Dataset format to process: dicom or nifti
   const [isScanningNpyFolder, setIsScanningNpyFolder] = useState(false)
   const csvFileInputRef = useRef(null) // Used to reset the local ROI CSV file input, since the file is optional
 
@@ -134,92 +157,6 @@ const DataManager = ({ pageId, configPath = "" }) => {
         }
       })
       setListCSVFiles(csvFiles)
-    }
-  }
-
-  const handleDcmFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      }
-      setSelectedDcmFolder(fileList)
-    }
-    else {
-      setSelectedDcmFolder(event.target.files.path)
-    }
-  };
-
-
-  const handleDatasetFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      }
-      setSelectedDatasetFolder(fileList)
-    }
-    else {
-      setSelectedDatasetFolder(event.target.files.path)
-    }
-  };
-
-  const handleSaveFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      }
-      setSelectedSaveFolder(fileList)
-    }
-    else {
-      setSelectedSaveFolder(event.target.files.path)
-    }
-  }
-
-  const handleChecksSaveFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      }
-      setSelectedSavePreChecksFolder(fileList)
-    }
-    else {
-      setSelectedSavePreChecksFolder(event.target.files.path)
     }
   }
 
@@ -511,6 +448,32 @@ const DataManager = ({ pageId, configPath = "" }) => {
     });
   }
 
+  // The one folder input of the Process card shows the path of the selected format
+  const processFolder = processDatasetType === "dicom" ? selectedDcmFolder : selectedNiftiFolder
+
+  /**
+   * @description Stores the dataset folder to process under its format, and clears the other
+   * format's folder, so the request never carries a DICOM and a NIfTI folder at once.
+   * @param {string} format - The dataset format, "dicom" or "nifti"
+   * @param {string} path - The path of the dataset folder
+   */
+  const setProcessFolder = (format, path) => {
+    setSelectedDcmFolder(format === "dicom" ? path : '')
+    setSelectedNiftiFolder(format === "nifti" ? path : '')
+  }
+
+  /**
+   * @description Changes the format of the dataset to process, keeping the selected folder.
+   * @param {string} format - The new dataset format, null when the active option is clicked again
+   */
+  const handleProcessDatasetTypeChange = (format) => {
+    if (!format) {
+      return
+    }
+    setProcessFolder(format, processFolder)
+    setProcessDatasetType(format)
+  }
+
   /**
    * @description Handles the click on the process button of the DICOM or NIfTI data.
   */
@@ -792,7 +755,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
         <Card.Header>
             <h4>Data Manager - Process data</h4>
             <DocLink
-              linkString={"https://mediml.readthedocs.io/en/latest/tutorials.html#datamanager"}
+              linkString={"https://medomicslab.gitbook.io/mediml-app-docs/radiomics/data-processing/data-manager"}
               name={"What is DataManager?"}
               image={"https://www.svgrepo.com/show/521262/warning-circle.svg"}
             />
@@ -811,39 +774,39 @@ const DataManager = ({ pageId, configPath = "" }) => {
         />
       </SectionCard>
 
-      {/* UPLOAD DICOM DATASET FOLDER*/}
+      {/* DATASET FORMAT */}
         <SectionCard
           row
-          title="DICOM dataset folder"
-          hint="Folder holding the DICOM study you want to convert into MEDscan objects. MEDiml expects the standard layout, one folder per patient and one sub-folder per imaging scan."
-          docHref={MEDIML_DOCS.inputDataDicom}
+          align="center"
+          title="Dataset format"
+          doc={{ title: INPUT_DATA_DOC_TITLE, content: <InputDataDoc formats={["dicom", "nifti"]} selected={processDatasetType} /> }}
+          docHref={MEDIML_DOCS.inputDataDev}
         >
-          <SourcePicker
-            mode={useWorkspace ? "workspace" : "local"}
-            kind="folder"
-            name="pathDicoms"
-            options={listWSFolders}
-            value={selectedDcmFolder}
-            onWorkspaceChange={setSelectedDcmFolder}
-            onLocalChange={handleDcmFolderChange}
+          <SelectButton
+            value={processDatasetType}
+            onChange={(e) => handleProcessDatasetTypeChange(e.value)}
+            optionLabel="label"
+            options={[
+              { label: 'DICOM', value: "dicom" },
+              { label: 'NIfTI', value: "nifti" }
+            ]}
           />
         </SectionCard>
 
-        {/* UPLOAD NIfTI DATASET FOLDER*/}
+      {/* UPLOAD DATASET FOLDER */}
         <SectionCard
           row
-          title="NIfTI dataset folder"
-          hint="Folder holding the NIfTI files to convert. File names must follow the MEDiml convention, PatientID__ImagingScanName(ROIname).Modality.nii.gz, so scans and their masks can be paired."
-          docHref={MEDIML_DOCS.inputDataNifti}
+          title={PROCESS_DATASET[processDatasetType].label}
+          hint={PROCESS_DATASET[processDatasetType].hint}
+          docHref={PROCESS_DATASET[processDatasetType].doc}
         >
           <SourcePicker
             mode={useWorkspace ? "workspace" : "local"}
             kind="folder"
-            name="pathNiftis"
+            name={processDatasetType === "dicom" ? "pathDicoms" : "pathNiftis"}
             options={listWSFolders}
-            value={selectedNiftiFolder}
-            onWorkspaceChange={setSelectedNiftiFolder}
-            onLocalChange={handleDatasetFolderChange}
+            value={processFolder}
+            onPathChange={(path) => setProcessFolder(processDatasetType, path)}
           />
         </SectionCard>
 
@@ -859,27 +822,32 @@ const DataManager = ({ pageId, configPath = "" }) => {
             name="pathSave"
             options={listWSFolders}
             value={selectedSaveFolder}
-            onWorkspaceChange={setSelectedSaveFolder}
-            onLocalChange={handleSaveFolderChange}
+            onPathChange={setSelectedSaveFolder}
             placeholder="Select a folder"
           />
         </SectionCard>
 
-        {/* NUMBER OF BATCH*/}
-        <SectionCard
-          row
-          align="center"
-          title="Cores"
-          hint="Number of CPU cores used for the parallel conversion."
+        {/* NUMBER OF BATCH */}
+        <Disclosure
+          title="Advanced"
+          modifiedCount={selectedNBatch !== DEFAULT_N_CORES ? 1 : 0}
         >
-          <Form.Control
-            name="nBatch"
-            type="number"
-            defaultValue={12}
-            placeholder={"Default: " + 12}
-            onChange={handleNBatchChange}
-          />
-        </SectionCard>
+          <SectionCard
+            row
+            align="center"
+            title="Cores"
+            hint="Number of CPU cores used for the parallel conversion."
+          >
+            <Form.Control
+              name="nBatch"
+              type="number"
+              defaultValue={DEFAULT_N_CORES}
+              placeholder={"Default: " + DEFAULT_N_CORES}
+              onChange={handleNBatchChange}
+              aria-label="Number of cores"
+            />
+          </SectionCard>
+        </Disclosure>
       </Form>
 
       {/* PROCESS BUTTON*/}
@@ -889,7 +857,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
           label="Process"
           name="ProcessButton"
           onClick={handleProcessClick}
-          disabled={(!selectedDcmFolder || !selectedSaveFolder || refreshEnabled) && (!selectedNiftiFolder || !selectedSaveFolder)}
+          disabled={!processFolder || !selectedSaveFolder || refreshEnabled}
           icon="pi pi-wrench"
           raised
           rounded
@@ -978,17 +946,17 @@ const DataManager = ({ pageId, configPath = "" }) => {
           row
           align="center"
           title="Dataset format"
-          hint="Which on-disk format the scans to check are in. NPY means MEDscan objects produced by the data processing step above."
-          docHref={MEDIML_DOCS.inputData}
+          doc={{ title: INPUT_DATA_DOC_TITLE, content: <InputDataDoc formats={["dicom", "nifti", "npy"]} selected={useDatasetType} /> }}
+          docHref={MEDIML_DOCS.inputDataDev}
         >
           <SelectButton
             value={useDatasetType}
             onChange={(e) => setUseDatasetType(e.value)}
             optionLabel="label"
             options={[
-              { label: 'NPY', value: "npy" },
+              { label: 'DICOM', value: "dicom" },
               { label: 'NIfTI', value: "nifti" },
-              { label: 'DICOM', value: "dicom" }
+              { label: 'NPY', value: "npy" }
             ]}
           />
         </SectionCard>
@@ -996,10 +964,10 @@ const DataManager = ({ pageId, configPath = "" }) => {
         {/* UPLOAD CSV FILE*/}
         <SectionCard
           row
-          title="ROI definitions"
+          title="Custom List of ROIs to Analyze"
           badge="optional"
-          hint="CSV file listing the scans to check and their associated ROIs (Region of Interest). Without it, every scan matching the pre-checks options below is analyzed, using the union of all the ROIs of each scan."
-          docHref={MEDIML_DOCS.roiCsv}
+          doc={{ title: ROI_CSV_DOC_TITLE, content: <RoiCsvDoc /> }}
+          docHref={MEDIML_DOCS.roiCsvDev}
         >
           <SourcePicker
             mode={useWorkspacePC ? "workspace" : "local"}
@@ -1008,7 +976,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
             name="pathCSV"
             options={listCSVFiles}
             value={selectedCSVFile}
-            onWorkspaceChange={setSelectedCSVFile}
+            onPathChange={setSelectedCSVFile}
             onLocalChange={handleCSVFileChange}
             inputRef={csvFileInputRef}
             showClear
@@ -1043,8 +1011,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
             name="pathNpy"
             options={listWSFolders}
             value={selectedNpyFolder}
-            onWorkspaceChange={handleNpyFolderChange}
-            onLocalChange={handleDatasetFolderChange}
+            onPathChange={handleNpyFolderChange}
           />
         </SectionCard>
 
@@ -1060,8 +1027,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
             name="pathSave"
             options={listWSFolders}
             value={selectedSavePreChecksFolder}
-            onWorkspaceChange={setSelectedSavePreChecksFolder}
-            onLocalChange={handleChecksSaveFolderChange}
+            onPathChange={setSelectedSavePreChecksFolder}
           />
         </SectionCard>
 
@@ -1110,7 +1076,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
               aria-label="Modalities"
             />
             <InputText
-              placeholder="Custom wildcard"
+              placeholder="Custom wildcard (e.g., *CECT*)"
               onChange={(e) => setCustomWildCard(e.target.value)}
               aria-label="Custom wildcard"
             />
@@ -1121,14 +1087,16 @@ const DataManager = ({ pageId, configPath = "" }) => {
             title="Check types"
             hint="Which pre-checks to run. Voxel checks report the dimension ranges in the dataset; window checks report the intensity ranges. Both are on by default."
           >
-            <Field inline label="Voxel checks (dimensions)">
+            <Field leading label="Voxel checks (dimensions)" htmlFor="precheck-voxel">
               <InputSwitch
+                inputId="precheck-voxel"
                 checked={runVoxelChecks}
                 onChange={(e) => setRunVoxelChecks(e.value)}
               />
             </Field>
-            <Field inline label="Window checks (intensity)">
+            <Field leading label="Window checks (intensity)" htmlFor="precheck-window">
               <InputSwitch
+                inputId="precheck-window"
                 checked={runWindowChecks}
                 onChange={(e) => setRunWindowChecks(e.value)}
               />

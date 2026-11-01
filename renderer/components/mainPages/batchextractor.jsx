@@ -9,15 +9,19 @@ import { Alert, Card, Form, ProgressBar } from 'react-bootstrap'
 import { toast } from 'react-toastify'
 import MEDIML_DOCS from '../../utilities/medimlDocs'
 import { requestBackend } from "../../utilities/requests"
+import DosiomicsDoc, { DOSIOMICS_DOC_TITLE } from "../docs/DosiomicsDoc"
+import InputDataDoc, { INPUT_DATA_DOC_TITLE } from "../docs/InputDataDoc"
+import RoiCsvDoc, { ROI_CSV_DOC_TITLE } from "../docs/RoiCsvDoc"
+import { getDefaultExtractionSettings, sameSettings } from "../../utilities/medimlDefaultSettings"
 import DocLink from '../extractionMEDiml/docLink'
+import ExtractionSettingsCard, { defaultSettingsSource } from '../extractionMEDiml/ExtractionSettingsCard'
 import SourcePicker from '../extractionMEDiml/SourcePicker'
 import { ErrorRequestContext } from '../generalPurpose/errorRequestContext'
-import Caption from '../primitives/Caption'
 import Disclosure from '../primitives/Disclosure'
 import SectionCard from '../primitives/SectionCard'
 import Toolbar from '../primitives/Toolbar'
-import { useMEDDataObjectsByType, useMEDDataStore } from '../workspace/useMEDData'
 import { MEDDataObject } from '../workspace/NewMedDataObject'
+import { useMEDDataObjectsByType, useMEDDataStore } from '../workspace/useMEDData'
 import { WorkspaceContext } from "../workspace/workspaceContext"
 import SettingsEditor from "./dataComponents/settingsEditor"
 
@@ -57,65 +61,51 @@ const EXTRACT_DATASET = {
 
 const DEFAULT_N_CORES = 12
 
-/** Feature categories in the order they are reported, with the prefixes recognizing them (mirrors
- *  FEATURE_CATEGORIES in MEDimlExtraction.py, which does the actual categorization). */
-const FEATURE_CATEGORIES = [
-  { key: "morph", label: "Morphological", prefixes: "morph_" },
-  { key: "intensity", label: "Intensity", prefixes: "locInt_, stats_, intHist_, intVolHist_" },
-  { key: "texture", label: "Texture", prefixes: "glcm_, glrlm_, glszm_, ngldm_, gldzm_, ngtdm_" },
-  { key: "unknown", label: "Unknown", prefixes: "any other prefix" }
-]
+/** Name of the copy of the run's settings written into the save folder. */
+const SETTINGS_SNAPSHOT_NAME = "extraction_settings.json"
 
 const BatchExtractor = ({ pageId, configPath = "" }) => {
   const { port } = useContext(WorkspaceContext) // Get the port of the backend
   const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
   // Re-run the folder/csv/settings list updates only when the set of relevant files actually
   // changes, instead of on every unrelated workspace change.
-  const relevantIds = useMEDDataObjectsByType(["directory", "csv", "json", "txt"])
+  const relevantIds = useMEDDataObjectsByType(["directory", "csv", "json"])
   const { setError } = useContext(ErrorRequestContext) // Get the function to set the error request
   const [progress, setProgress] = useState(0)
-  const [loadingEdit, setLoadingEdit] = useState(false)
   const [refreshEnabled, setRefreshEnabled] = useState(false) // A boolean variable to control refresh
   const [selectedReadFolder, setSelectedReadFolder] = useState('')
   const [selectedSaveFolder, setSelectedSaveFolder] = useState('')
   const [selectedNBatch, setSelectedNBatch] = useState(DEFAULT_N_CORES)
   const [selectedCSVFile, setSelectedCSVFile] = useState('')
-  const [selectedSettingsFile, setSelectedSettingsFile] = useState('')
   const [listWSFolders, setListWSFolders] = useState([]) // List of folders in the workspace
   const [listCSVFiles, setListCSVFiles] = useState([]) // List of csv files in the workspace
   const [listSettingsFiles, setListSettingsFiles] = useState([]) // List of settings files in the workspace
-  const [settings, setSettings] = useState({}) // Settings of the node
+  const [settings, setSettings] = useState(getDefaultExtractionSettings) // Extraction settings in use
+  const [settingsSource, setSettingsSource] = useState(defaultSettingsSource) // Where the settings come from, see ExtractionSettingsCard
   const [nscans, setNscans] = useState(0) // Number of scans to be processed
   const [skipExisting, setSkipExisting] = useState(false) // Skip existing extractions
   const [activeIndex, setActiveIndex] = useState(false)
   const [saveFolder, setSaveFolder] = useState('') // Path of the folder where the results are saved
   const [showRadiomicsResults, setShowRadiomicsResults] = useState(false) // used to display the extraction results
   const [showEdit, setShowEdit] = useState(false) // used to display the extraction results
-  const [useDatasetType, setUseDatasetType] = useState("npy") // A boolean variable to control the use of NIfTI dataset instead of NPY dataset
+  const [useDatasetType, setUseDatasetType] = useState("dicom") // A boolean variable to control the use of NIfTI dataset instead of NPY dataset
   const [nodes, setNodes] = useState([])
   const [useWorkspace, setUseWorkspace] = useState(false) // A boolean variable to control the use of the workspace
   const [analyzeDoseMaps, setAnalyzeDoseMaps] = useState(false) // A boolean variable to control the analysis of dose maps
   const [selectedPredDosesCSV, setSelectedPredDosesCSV] = useState('') // Path to CSV file containing prescribed doses per patient
   const [prescDoseColumn, setPrescDoseColumn] = useState('') // Column name for prescribed dose values in pred_doses_csv
   const csvFileInputRef = useRef(null) // Used to reset the local ROI CSV file input, since the file is optional
-  const [listTXTFiles, setListTXTFiles] = useState([]) // List of txt files in the workspace
-  const [categorizeCSVFile, setCategorizeCSVFile] = useState('') // Radiomics table to categorize
-  const [categorizeTXTFile, setCategorizeTXTFile] = useState('') // Definitions file of the radiomics table
-  const [categorizing, setCategorizing] = useState(false)
-  const [categorizeResults, setCategorizeResults] = useState(null) // Features count and saved files per category
 
   useEffect(() => {
     updateWSfolder()
     updateCSVFilesList()
     updateSettingsFilesList()
-    updateTXTFilesList()
   }, [])
 
   useEffect(() => {
     updateWSfolder()
     updateCSVFilesList()
     updateSettingsFilesList()
-    updateTXTFilesList()
   }, [relevantIds])
 
   const updateWSfolder = () => {
@@ -160,78 +150,11 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
     }
   }
 
-  const updateTXTFilesList = () => {
-    const globalData = medDataStore.snapshot()
-    if (globalData !== undefined) {
-      let txtFiles = []
-      Object.keys(globalData).forEach((key) => {
-        if (globalData[key].type === "txt") {
-          txtFiles.push({ name: globalData[key].name, value: globalData[key].path })
-        }
-      })
-      setListTXTFiles(txtFiles)
-    }
-  }
-
   const fs = require('fs');
-
-  const handleReadFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      }
-      setSelectedReadFolder(fileList)
-    }
-    else {
-      setSelectedReadFolder(event.target.files.path)
-    }
-  };
-
-  const handleSaveFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      }
-      setSelectedSaveFolder(fileList)
-    }
-    else {
-      setSelectedSaveFolder(event.target.files.path)
-    }
-  };
 
   const handleNBatchChange = (event) => {
     const n_batch = event.target.value;
     setSelectedNBatch(parseInt(n_batch));
-  };
-
-  const handleSettingsFileChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-      setSelectedSettingsFile(fileList)
-    }
-    else {
-      setSelectedSettingsFile(event.target.files.path)
-    }
   };
 
   const handleCSVFileChange = (event) => {
@@ -327,47 +250,34 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
     }
   }
 
+  /**
+   * @description Opens the settings editor. It edits a copy, so the settings in use only change on Apply.
+   */
   const handleEditClick = () => {
-    setLoadingEdit(true)
-    // Make a POST request to the backend API
-    requestBackend(
-      port, 
-      '/extraction_MEDiml/run_all/be_json', 
-      {selectedSettingsFile}, 
-      (response) => {
-        console.log("response", response)
-        setLoadingEdit(false)
-        if (response.error) {
-          console.error('Error:', response.error)
-          toast.error('Error: ' + response.error)
-          setShowEdit(false)
-          // eslint-disable-next-line no-prototype-builtins
-          if (!response.error.hasOwnProperty('message')) {
-            setError({"message": response.error})
-          } else {
-            setError(response.error)
-          }
-        } else {
-          // Handle the response from the backend if needed
-          console.log('Response from backend:', response)
+    setShowEdit(true)
+  }
 
-          // set settings
-          setSettings(response)
+  /**
+   * @description Uses the settings chosen in the settings card.
+   * @param {Object} nextSettings - The settings to use
+   * @param {Object} nextSource - Where they come from
+   */
+  const handleSettingsChange = (nextSettings, nextSource) => {
+    setSettings(nextSettings)
+    setSettingsSource(nextSource)
+  }
 
-          // show edit dialog
-          setShowEdit(true)
-
-          // toast message
-          toast.success('Settings loaded!')
-        }
-      },
-      (error) => {
-        setLoadingEdit(false)
-        console.error('Error:', error)
-        toast.error('Error: ' + error)
-        setShowEdit(false)
-      }
-    )
+  /**
+   * @description Writes the settings of this run into the save folder and returns their path.
+   * MEDiml reads the settings from a file, and the copy records how the results were made.
+   * The Cores field is written as n_batch, since a n_batch in the file would override it.
+   * @returns {Promise<string>} Path of the written settings file
+   */
+  const writeSettingsSnapshot = async () => {
+    const snapshotPath = require('path').join(selectedSaveFolder, SETTINGS_SNAPSHOT_NAME)
+    const nBatch = Number.isInteger(selectedNBatch) && selectedNBatch > 0 ? selectedNBatch : DEFAULT_N_CORES
+    await fs.promises.writeFile(snapshotPath, JSON.stringify({ ...settings, n_batch: nBatch }, null, 4))
+    return snapshotPath
   }
 
   const handleOpenFolderClick = () => {
@@ -375,72 +285,21 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
     shell.openPath(saveFolder);
   }
 
-  /**
-   * @description Selects the radiomics table to categorize, and its definitions file when MEDiml saved
-   * it next to the table under the same name, as it does by default.
-   * @param {string} csvPath - The path of the radiomics table
-   */
-  const selectCategorizeCSV = (csvPath) => {
-    setCategorizeCSVFile(csvPath)
-    setCategorizeResults(null)
-    const txtPath = csvPath ? csvPath.replace(/\.csv$/i, '.txt') : ''
-    if (txtPath && fs.existsSync(txtPath)) {
-      setCategorizeTXTFile(txtPath)
-    }
-  }
-
-  const handleCategorizeCSVChange = (event) => {
-    if (event.target.files.length > 0) {
-      selectCategorizeCSV(event.target.files[0].path)
-    }
-  }
-
-  const handleCategorizeTXTChange = (event) => {
-    if (event.target.files.length > 0) {
-      setCategorizeTXTFile(event.target.files[0].path)
-      setCategorizeResults(null)
-    }
-  }
-
-  const handleCategorizeClick = () => {
-    setCategorizing(true)
-    setCategorizeResults(null)
-    requestBackend(
-      port,
-      '/extraction_MEDiml/run_all/be_categorize',
-      { path_csv: categorizeCSVFile, path_txt: categorizeTXTFile },
-      (response) => {
-        setCategorizing(false)
-        MEDDataObject.updateWorkspaceDataObject()
-        if (response.error) {
-          console.error('Error:', response.error)
-          toast.error('Error: ' + response.error)
-          // eslint-disable-next-line no-prototype-builtins
-          if (!response.error.hasOwnProperty('message')) {
-            setError({"message": response.error})
-          } else {
-            setError(response.error)
-          }
-        } else {
-          setCategorizeResults(response)
-          const nCategories = Object.keys(response.categories).length
-          toast.success(`Features split into ${nCategories} categor${nCategories === 1 ? 'y' : 'ies'}!`)
-        }
-      },
-      (error) => {
-        setCategorizing(false)
-        console.error('Error:', error)
-        toast.error('Error: ' + error)
-      }
-    )
-  }
-
   const handleRunClick = async () => {
+
+    let pathParams
+    try {
+      pathParams = await writeSettingsSnapshot()
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error('Could not write the extraction settings to the save folder: ' + error.message)
+      return
+    }
 
     // Create an object with the input values
     const requestData = {
       path_read: selectedReadFolder,
-      path_params: selectedSettingsFile,
+      path_params: pathParams,
       path_csv: selectedCSVFile,
       path_save: selectedSaveFolder,
       n_batch: parseInt(selectedNBatch),
@@ -572,13 +431,32 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
   }, [refreshEnabled, nscans, saveFolder]); // The empty dependency array ensures this effect runs only once when the component mounts
 
   /**
-   * @returns {JSX.Element} A dialog to edit extraction options
-   * @description This function is used to render the dialog to edit extraction options.
+   * @description Uses the edited settings and tells the user whether anything changed.
+   * @param {Object} edited - The settings returned by the editor
+   */
+  const handleApplySettings = (edited) => {
+    setShowEdit(false)
+    if (sameSettings(edited, settings)) {
+      toast.info('No changes to apply')
+      return
+    }
+    setSettings(edited)
+    toast.success('Extraction settings applied. They will be used for the next run.')
+  }
+
+  /**
+   * @returns {JSX.Element} The side panel to edit the extraction settings
+   * @description Mounted only while open, so each opening starts from the settings in use.
    */
   const renderEdit = () => {
-    if (selectedSettingsFile && showEdit) {
+    if (showEdit) {
       return (
-        <SettingsEditor showEdit={showEdit} setShowEdit={setShowEdit} settings={settings} pathSettings={selectedSettingsFile} onHideBE={setLoadingEdit}/>
+        <SettingsEditor
+          visible={showEdit}
+          settings={settings}
+          onHide={() => setShowEdit(false)}
+          onApply={handleApplySettings}
+        />
       )
     }
   }
@@ -642,7 +520,7 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
         <Card.Header>
           <h4>Batch Extractor - Radiomics</h4>
           <DocLink
-            linkString={"https://mediml.readthedocs.io/en/latest/tutorials.html#batchextractor"}
+            linkString={"https://medomicslab.gitbook.io/mediml-app-docs/radiomics/feature-extraction/batch-extraction"}
             name={"What is BatchExtractor?"}
             image={"https://www.svgrepo.com/show/521262/warning-circle.svg"}
           />
@@ -661,73 +539,23 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
         />
       </SectionCard>
 
-      {/* Ask user if he is analyzing dose metrics*/}
-      <SectionCard
-        row
-        align="center"
-        title="Analyze dose maps"
-        hint="Extract dosiomics features in addition to radiomics. Requires a CSV of prescribed doses per patient, configured below."
-      >
-        <InputSwitch
-          checked={analyzeDoseMaps}
-          onChange={(e) => setAnalyzeDoseMaps(e.value)}
-        />
-      </SectionCard>
-
-      {analyzeDoseMaps && (
-        <>
-          <SectionCard
-            row
-            title="Prescribed doses CSV"
-            hint="CSV file giving the prescribed dose per patient. It must include a PatientID column, plus the dose column named below."
-          >
-            <SourcePicker
-              mode={useWorkspace ? "workspace" : "local"}
-              kind="file"
-              accept=".csv"
-              name="pred_doses_csv"
-              options={listCSVFiles}
-              value={selectedPredDosesCSV}
-              onWorkspaceChange={setSelectedPredDosesCSV}
-              onLocalChange={handlePredDosesCSVChange}
-              placeholder="Select a file"
-            />
-          </SectionCard>
-
-          <SectionCard
-            row
-            align="center"
-            title="Dose column name"
-            hint="Name of the column in the prescribed doses CSV holding the prescription dose for each patient."
-          >
-            <Form.Control
-              name="presc_dose_column"
-              type="text"
-              value={prescDoseColumn}
-              placeholder="e.g. PrescriptionDose"
-              onChange={(event) => setPrescDoseColumn(event.target.value)}
-              aria-label="Prescribed dose column name"
-            />
-          </SectionCard>
-        </>
-      )}
-
       {/* DATASET FORMAT */}
       <SectionCard
         row
         align="center"
         title="Dataset format"
-        hint="Which on-disk format the scans are in. NPY means MEDscan objects produced by the DataManager."
-        docHref={MEDIML_DOCS.inputData}
+        doc={{ title: INPUT_DATA_DOC_TITLE, content: <InputDataDoc formats={["dicom", "nifti", "npy"]} selected={useDatasetType} /> }}
+        docHref={MEDIML_DOCS.inputDataDev}
       >
         <SelectButton
           value={useDatasetType}
           onChange={(e) => setUseDatasetType(e.value)}
           optionLabel="label"
           options={[
-            { label: 'NPY', value: "npy" },
+            { label: 'DICOM', value: "dicom" },
             { label: 'NIfTI', value: "nifti" },
-            { label: 'DICOM', value: "dicom" }
+            { label: 'NPY', value: "npy" }
+            
           ]}
         />
       </SectionCard>
@@ -745,54 +573,28 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
           name="path_read"
           options={listWSFolders}
           value={selectedReadFolder}
-          onWorkspaceChange={setSelectedReadFolder}
-          onLocalChange={handleReadFolderChange}
+          onPathChange={setSelectedReadFolder}
         />
       </SectionCard>
 
-      {/* UPLOAD SETTINGS FILE*/}
-      <SectionCard
-        row
-        title="Extraction settings"
-        hint="JSON file describing how features are computed: interpolation, re-segmentation, discretisation, the filters to apply and which feature families to extract."
-        docHref={MEDIML_DOCS.featuresExtraction}
-      >
-        <SourcePicker
-          mode={useWorkspace ? "workspace" : "local"}
-          kind="file"
-          accept=".json"
-          name="path_params"
-          options={listSettingsFiles}
-          value={selectedSettingsFile}
-          onWorkspaceChange={setSelectedSettingsFile}
-          onLocalChange={handleSettingsFileChange}
-          placeholder="Select a file"
-          action={
-            <Button
-              type="button"
-              severity="info"
-              label="Edit"
-              name="EditSettingsButton"
-              onClick={handleEditClick}
-              disabled={(!selectedSettingsFile)}
-              loading={loadingEdit}
-              icon="pi pi-pencil"
-              iconPos="left"
-              raised
-              rounded
-            />
-          }
-        />
-      </SectionCard>
+      {/* EXTRACTION SETTINGS */}
+      <ExtractionSettingsCard
+        settings={settings}
+        source={settingsSource}
+        onChange={handleSettingsChange}
+        onEdit={handleEditClick}
+        useWorkspace={useWorkspace}
+        workspaceFiles={listSettingsFiles}
+      />
 
 
         {/* UPLOAD CSV FILE*/}
         <SectionCard
           row
-          title="ROI definitions"
+          title="Custom List of ROIs to Analyze"
           badge="optional"
-          hint="CSV file listing the scans to extract and their corresponding Regions of Interest. Without it, every scan found in the dataset folder is extracted, using the union of all the ROIs of each scan."
-          docHref={MEDIML_DOCS.roiCsv}
+          doc={{ title: ROI_CSV_DOC_TITLE, content: <RoiCsvDoc /> }}
+          docHref={MEDIML_DOCS.roiCsvDev}
         >
           <SourcePicker
             mode={useWorkspace ? "workspace" : "local"}
@@ -801,7 +603,7 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
             name="path_csv"
             options={listCSVFiles}
             value={selectedCSVFile}
-            onWorkspaceChange={setSelectedCSVFile}
+            onPathChange={setSelectedCSVFile}
             onLocalChange={handleCSVFileChange}
             inputRef={csvFileInputRef}
             showClear
@@ -835,20 +637,14 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
             name="path_save"
             options={listWSFolders}
             value={selectedSaveFolder}
-            onWorkspaceChange={setSelectedSaveFolder}
-            onLocalChange={handleSaveFolderChange}
-            caption={
-              <Caption warn>
-                Warning: to select a folder, it must contain at least one file, even if it is empty.
-              </Caption>
-            }
+            onPathChange={setSelectedSaveFolder}
           />
         </SectionCard>
 
-      {/* NUMBER OF BATCH + SKIP EXISTING */}
+      {/* NUMBER OF BATCH + SKIP EXISTING + DOSE MAPS */}
       <Disclosure
         title="Advanced"
-        modifiedCount={(selectedNBatch !== DEFAULT_N_CORES ? 1 : 0) + (skipExisting ? 1 : 0)}
+        modifiedCount={(selectedNBatch !== DEFAULT_N_CORES ? 1 : 0) + (skipExisting ? 1 : 0) + (analyzeDoseMaps ? 1 : 0)}
       >
         <SectionCard
           row
@@ -881,6 +677,57 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
             }}
           />
         </SectionCard>
+
+        {/* Ask user if he is analyzing dose metrics*/}
+        <SectionCard
+          row
+          align="center"
+          title="Analyze dose maps"
+          doc={{ title: DOSIOMICS_DOC_TITLE, content: <DosiomicsDoc /> }}
+        >
+          <InputSwitch
+            checked={analyzeDoseMaps}
+            onChange={(e) => setAnalyzeDoseMaps(e.value)}
+          />
+        </SectionCard>
+
+        {analyzeDoseMaps && (
+          <>
+            <SectionCard
+              row
+              title="Prescribed doses CSV"
+              hint="CSV file giving the prescribed dose per patient. It must include a PatientID column, plus the dose column named below."
+            >
+              <SourcePicker
+                mode={useWorkspace ? "workspace" : "local"}
+                kind="file"
+                accept=".csv"
+                name="pred_doses_csv"
+                options={listCSVFiles}
+                value={selectedPredDosesCSV}
+                onPathChange={setSelectedPredDosesCSV}
+                onLocalChange={handlePredDosesCSVChange}
+                placeholder="Select a file"
+              />
+            </SectionCard>
+
+            <SectionCard
+              row
+              align="center"
+              title="Dose column name"
+              hint="Name of the column in the prescribed doses CSV holding the prescription dose for each patient."
+            >
+              <Form.Control
+                name="presc_dose_column"
+                type="text"
+                value={prescDoseColumn}
+                placeholder="e.g. PrescriptionDose"
+                onChange={(event) => setPrescDoseColumn(event.target.value)}
+                aria-label="Prescribed dose column name"
+              />
+            </SectionCard>
+          </>
+        )}
       </Disclosure>
 
       {/* PROGRESS BAR*/}
@@ -920,7 +767,6 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
             !selectedReadFolder ||
             !selectedSaveFolder ||
             refreshEnabled ||
-            !selectedSettingsFile ||
             (analyzeDoseMaps && (!selectedPredDosesCSV || !prescDoseColumn.trim()))
           )}
           icon="pi pi-play"
@@ -937,103 +783,6 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
           rounded
         />
       </Toolbar>
-      </Card.Body>
-    </Card>
-
-    {/* RADIOMICS FEATURES CATEGORIZATION */}
-    <Card>
-      <Card.Body>
-        <Card.Header>
-          <h4>Batch Extractor - Radiomics Features Categorization</h4>
-          <span>
-            Splits an extracted radiomics table into one table per feature category: Morphological, Intensity and Texture.
-          </span>
-        </Card.Header>
-        <SectionCard
-          row
-          title="Radiomics table"
-          hint="CSV file of the extracted features (e.g. radiomics__PET(GTV)__image.csv), with the radVar1, radVar2, ... columns."
-        >
-          <SourcePicker
-            mode={useWorkspace ? "workspace" : "local"}
-            kind="file"
-            accept=".csv"
-            name="categorize_csv"
-            options={listCSVFiles}
-            value={categorizeCSVFile}
-            onWorkspaceChange={selectCategorizeCSV}
-            onLocalChange={handleCategorizeCSVChange}
-            placeholder="Select a file"
-          />
-        </SectionCard>
-
-        <SectionCard
-          row
-          title="Features definitions"
-          hint="TXT file linking the table columns to the features names (||radVar1:morph_3D__Fmorph_vol__scale2||...). Filled in automatically when it sits next to the table under the same name."
-        >
-          <SourcePicker
-            mode={useWorkspace ? "workspace" : "local"}
-            kind="file"
-            accept=".txt"
-            name="categorize_txt"
-            options={listTXTFiles}
-            value={categorizeTXTFile}
-            onWorkspaceChange={(path) => {
-              setCategorizeTXTFile(path)
-              setCategorizeResults(null)
-            }}
-            onLocalChange={handleCategorizeTXTChange}
-            placeholder="Select a file"
-            caption={
-              !useWorkspace && categorizeTXTFile ? <Caption>{categorizeTXTFile}</Caption> : null
-            }
-          />
-        </SectionCard>
-
-        {categorizeResults && (
-          <TreeTable
-            value={FEATURE_CATEGORIES.filter((c) => categorizeResults.categories[c.key]).map((c) => ({
-              key: c.key,
-              data: {
-                category: c.label,
-                features: categorizeResults.categories[c.key].n_features,
-                folder: categorizeResults.categories[c.key].folder
-              }
-            }))}
-            className="mt-4"
-            tableStyle={{ minWidth: '25rem' }}
-          >
-            <Column field="category" header="Category"></Column>
-            <Column field="features" header={`Features (${categorizeResults.n_patients} patients)`}></Column>
-            <Column field="folder" header="Saved in"></Column>
-          </TreeTable>
-        )}
-
-        <Toolbar>
-          <Button
-            severity="success"
-            label="CATEGORIZE"
-            name="CategorizeButton"
-            onClick={handleCategorizeClick}
-            disabled={!categorizeCSVFile || !categorizeTXTFile || categorizing}
-            loading={categorizing}
-            icon="pi pi-sitemap"
-            raised
-            rounded
-          />
-          {categorizeResults && (
-            <Button
-              severity="info"
-              label="Open folder"
-              name="OpenCategoriesFolderButton"
-              icon="pi pi-folder-open"
-              onClick={() => require('electron').shell.openPath(require('path').dirname(categorizeCSVFile))}
-              raised
-              rounded
-            />
-          )}
-        </Toolbar>
       </Card.Body>
     </Card>
   </div>

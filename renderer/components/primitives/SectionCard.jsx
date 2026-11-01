@@ -32,6 +32,8 @@ import useHint, { hintStyles } from "./useHint"
  *   "ROI" has no universal glyph, so icons supplement text, never replace it.
  * @param {string} badge Short metadata beside the title, e.g. "optional".
  * @param {ReactNode} hint Togglable help text (see useHint.jsx -- not a tooltip).
+ * @param {{title: string, content: ReactNode}} doc Open this documentation in a
+ *   side panel from the info pill instead of the inline hint (see DocPanel.jsx).
  * @param {string} docHref Link into the MEDiml documentation.
  * @param {string} docLabel Link text.
  * @param {ReactNode} headerEnd Trailing header content. In row mode it sits
@@ -49,6 +51,7 @@ const SectionCard = ({
   icon,
   badge,
   hint,
+  doc,
   docHref,
   docLabel,
   headerEnd,
@@ -63,7 +66,7 @@ const SectionCard = ({
   children,
   ...rest
 }) => {
-  const { toggle, panel } = useHint({ hint, docHref, docLabel, label: typeof title === "string" ? title : undefined })
+  const { toggle, panel, docPanel } = useHint({ hint, doc, docHref, docLabel, label: typeof title === "string" ? title : undefined })
 
   const classes = [
     styles.card,
@@ -101,6 +104,7 @@ const SectionCard = ({
         </ParamGrid>
 
         {panel && <div className={styles.rowHint}>{panel}</div>}
+        {docPanel}
       </section>
     )
   }

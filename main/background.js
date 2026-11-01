@@ -311,6 +311,15 @@ if (isProd) {
   })
 
   /**
+   * @description Asks where to save a new file; the renderer writes it.
+   * @param {Object} options - showSaveDialog options (title, defaultPath, filters)
+   * @returns {Promise<Object>} { canceled, filePath }
+   */
+  ipcMain.handle("select-save-path", async (_event, options = {}) => {
+    return dialog.showSaveDialog(mainWindow, options)
+  })
+
+  /**
    * @description select path to folder
    * @returns {String} path to the selected folder
    */
