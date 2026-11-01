@@ -1,7 +1,8 @@
-import { shell } from "electron"
 import { ExternalLink, Info } from "lucide-react"
-import { useId, useState } from "react"
+import { useCallback, useId, useState } from "react"
+import DocPanel from "./DocPanel"
 import styles from "./Hint.module.css"
+import openDocs from "./openDocs"
 
 /**
  * The togglable "What is this?" pill and the panel it opens.
@@ -25,22 +26,45 @@ import styles from "./Hint.module.css"
  * @param {string} docLabel Link text.
  * @param {boolean} showHint Caller renders the hint itself, always visible; the
  *   hook then reports `collapsible: false` and returns no toggle.
+ * @param {{title: string, content: ReactNode}} doc For a concept a paragraph
+ *   cannot explain: the pill opens this documentation in a <DocPanel> instead
+ *   of the inline hint. The caller must render the returned `docPanel`.
+ *   `docHref` / `docLabel`, when given, become the panel's closing link.
  * @returns {{collapsible: boolean, open: boolean, hintId: string,
- *            toggle: ReactNode, panel: ReactNode}}
+ *            toggle: ReactNode, panel: ReactNode, docPanel: ReactNode}}
  */
-export default function useHint({ hint, docHref, docLabel = "Read the documentation", showHint = false, label } = {}) {
+export default function useHint({ hint, docHref, docLabel = "Read the documentation", showHint = false, label, doc } = {}) {
   const reactId = useId()
   const hintId = `${reactId}-hint`
   const [open, setOpen] = useState(false)
-  const collapsible = Boolean(hint) && !showHint
+  const closeDoc = useCallback(() => setOpen(false), [])
+  const collapsible = (Boolean(hint) || Boolean(doc)) && !showHint
 
-  const openDocs = (event) => {
-    event.preventDefault()
-    try {
-      shell.openExternal(docHref)
-    } catch {
-      // Outside Electron (tests, storybook) fall back to normal navigation.
-      window.open(docHref, "_blank", "noopener")
+  if (doc && collapsible) {
+    return {
+      collapsible,
+      open,
+      hintId,
+      toggle: (
+        <button
+          type="button"
+          className={styles.infoToggle}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-label={label ? `Learn about ${label}` : "Learn more"}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span className={styles.infoIcon} aria-hidden="true">
+            <Info size={14} />
+          </span>
+        </button>
+      ),
+      panel: null,
+      docPanel: (
+        <DocPanel open={open} onClose={closeDoc} title={doc.title} docHref={docHref} docLabel={docLabel}>
+          {doc.content}
+        </DocPanel>
+      )
     }
   }
 
@@ -65,7 +89,7 @@ export default function useHint({ hint, docHref, docLabel = "Read the documentat
         {hint}
         {docHref && (
           <div>
-            <a className={styles.docLink} href={docHref} onClick={openDocs}>
+            <a className={styles.docLink} href={docHref} onClick={(event) => openDocs(event, docHref)}>
               {docLabel}
               <ExternalLink size={12} aria-hidden="true" />
             </a>
@@ -74,7 +98,7 @@ export default function useHint({ hint, docHref, docLabel = "Read the documentat
       </div>
     ) : null
 
-  return { collapsible, open, hintId, toggle, panel }
+  return { collapsible, open, hintId, toggle, panel, docPanel: null }
 }
 
 export { styles as hintStyles }

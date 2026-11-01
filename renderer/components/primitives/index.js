@@ -14,6 +14,7 @@
  */
 export { default as Caption } from "./Caption"
 export { default as Disclosure } from "./Disclosure"
+export { default as DocPanel } from "./DocPanel"
 export { default as Field } from "./Field"
 export { default as ParamGrid } from "./ParamGrid"
 export { default as SectionCard } from "./SectionCard"

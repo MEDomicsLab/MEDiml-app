@@ -50,8 +50,6 @@ class GoExecScriptRunExperiment(GoExecutionScript):
             results_pipeline = self.current_experiment.run_be_count()
         elif self._id.lower() == "be_save_json":
             results_pipeline = self.current_experiment.run_be_save_json()
-        elif self._id.lower() == "be_categorize":
-            results_pipeline = self.current_experiment.run_be_categorize()
         else:
             results_pipeline = self.current_experiment.run()
 

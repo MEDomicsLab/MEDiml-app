@@ -17,6 +17,8 @@ import useHint, { hintStyles } from "./useHint"
  *   replace them.
  * @param {string} badge Short metadata, e.g. "optional" or a unit.
  * @param {ReactNode} hint Help text, shown when the toggle is opened.
+ * @param {{title: string, content: ReactNode}} doc Open this documentation in a
+ *   side panel from the info pill instead of the inline hint (see DocPanel.jsx).
  * @param {boolean} showHint Render the hint inline and always visible, with no
  *   toggle. For the rare parameter whose explanation must not be missed.
  * @param {string} docHref Link to the MEDiml documentation for this parameter.
@@ -31,6 +33,7 @@ const Field = ({
   label,
   badge,
   hint,
+  doc,
   showHint = false,
   docHref,
   docLabel = "Read the documentation",
@@ -41,7 +44,7 @@ const Field = ({
   children,
   ...rest
 }) => {
-  const { collapsible, toggle, panel } = useHint({ hint, docHref, docLabel, showHint, label })
+  const { collapsible, toggle, panel, docPanel } = useHint({ hint, doc, docHref, docLabel, showHint, label })
 
   return (
     <div className={`${styles.field} ${inline ? styles.inline : ""} ${className}`.trim()} {...rest}>
@@ -55,6 +58,7 @@ const Field = ({
         )}
         {showHint && hint && <Caption>{hint}</Caption>}
         {panel}
+        {docPanel}
       </div>
 
       {/* Only when there is something to render. A childless Field -- used in a

@@ -14,6 +14,8 @@ import Zoom from "yet-another-react-lightbox/plugins/zoom"
 import "yet-another-react-lightbox/styles.css"
 import MEDIML_DOCS from "../../utilities/medimlDocs"
 import { requestBackend } from "../../utilities/requests"
+import InputDataDoc, { INPUT_DATA_DOC_TITLE } from "../docs/InputDataDoc"
+import RoiCsvDoc, { ROI_CSV_DOC_TITLE } from "../docs/RoiCsvDoc"
 import DocLink from "../extractionMEDiml/docLink"
 import SourcePicker from "../extractionMEDiml/SourcePicker"
 import { ErrorRequestContext } from "../generalPurpose/errorRequestContext"
@@ -115,7 +117,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
   const [useWorkspacePC, setUseWorkspacePC] = useState(false) // A boolean variable to control the use of the workspace for pre-checks
   const [runVoxelChecks, setRunVoxelChecks] = useState(true) // Voxel (dimensions) pre-checks
   const [runWindowChecks, setRunWindowChecks] = useState(true) // Window (intensity) pre-checks
-  const [useDatasetType, setUseDatasetType] = useState("npy") // Dataset format for pre-checks: npy, nifti, or dicom
+  const [useDatasetType, setUseDatasetType] = useState("dicom") // Dataset format for pre-checks: npy, nifti, or dicom
   const [processDatasetType, setProcessDatasetType] = useState("dicom") // Dataset format to process: dicom or nifti
   const [isScanningNpyFolder, setIsScanningNpyFolder] = useState(false)
   const csvFileInputRef = useRef(null) // Used to reset the local ROI CSV file input, since the file is optional
@@ -753,7 +755,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
         <Card.Header>
             <h4>Data Manager - Process data</h4>
             <DocLink
-              linkString={"https://mediml.readthedocs.io/en/latest/tutorials.html#datamanager"}
+              linkString={"https://medomicslab.gitbook.io/mediml-app-docs/radiomics/data-processing/data-manager"}
               name={"What is DataManager?"}
               image={"https://www.svgrepo.com/show/521262/warning-circle.svg"}
             />
@@ -777,8 +779,8 @@ const DataManager = ({ pageId, configPath = "" }) => {
           row
           align="center"
           title="Dataset format"
-          hint="Which on-disk format the scans to process are in."
-          docHref={MEDIML_DOCS.inputData}
+          doc={{ title: INPUT_DATA_DOC_TITLE, content: <InputDataDoc formats={["dicom", "nifti"]} selected={processDatasetType} /> }}
+          docHref={MEDIML_DOCS.inputDataDev}
         >
           <SelectButton
             value={processDatasetType}
@@ -944,17 +946,17 @@ const DataManager = ({ pageId, configPath = "" }) => {
           row
           align="center"
           title="Dataset format"
-          hint="Which on-disk format the scans to check are in. NPY means MEDscan objects produced by the data processing step above."
-          docHref={MEDIML_DOCS.inputData}
+          doc={{ title: INPUT_DATA_DOC_TITLE, content: <InputDataDoc formats={["dicom", "nifti", "npy"]} selected={useDatasetType} /> }}
+          docHref={MEDIML_DOCS.inputDataDev}
         >
           <SelectButton
             value={useDatasetType}
             onChange={(e) => setUseDatasetType(e.value)}
             optionLabel="label"
             options={[
-              { label: 'NPY', value: "npy" },
+              { label: 'DICOM', value: "dicom" },
               { label: 'NIfTI', value: "nifti" },
-              { label: 'DICOM', value: "dicom" }
+              { label: 'NPY', value: "npy" }
             ]}
           />
         </SectionCard>
@@ -962,10 +964,10 @@ const DataManager = ({ pageId, configPath = "" }) => {
         {/* UPLOAD CSV FILE*/}
         <SectionCard
           row
-          title="ROI definitions"
+          title="Custom List of ROIs to Analyze"
           badge="optional"
-          hint="CSV file listing the scans to check and their associated ROIs (Region of Interest). Without it, every scan matching the pre-checks options below is analyzed, using the union of all the ROIs of each scan."
-          docHref={MEDIML_DOCS.roiCsv}
+          doc={{ title: ROI_CSV_DOC_TITLE, content: <RoiCsvDoc /> }}
+          docHref={MEDIML_DOCS.roiCsvDev}
         >
           <SourcePicker
             mode={useWorkspacePC ? "workspace" : "local"}
