@@ -19,6 +19,7 @@ export const MEDIML_DOCS = {
   // and the organize_dataset.py script; the latest build does not yet.
   inputDataDev: "https://mediml.readthedocs.io/en/dev/input_data.html",
   roiCsvDev: "https://mediml.readthedocs.io/en/dev/csv_file.html",
+  featuresExtractionDev: "https://mediml.readthedocs.io/en/dev/configurations_file.html#features-extraction",
 
   // Configuration file, by section
   configuration: `${BASE}/configurations_file.html`,

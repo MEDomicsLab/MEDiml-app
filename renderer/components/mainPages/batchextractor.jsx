@@ -12,7 +12,9 @@ import { requestBackend } from "../../utilities/requests"
 import DosiomicsDoc, { DOSIOMICS_DOC_TITLE } from "../docs/DosiomicsDoc"
 import InputDataDoc, { INPUT_DATA_DOC_TITLE } from "../docs/InputDataDoc"
 import RoiCsvDoc, { ROI_CSV_DOC_TITLE } from "../docs/RoiCsvDoc"
+import { getDefaultExtractionSettings, sameSettings } from "../../utilities/medimlDefaultSettings"
 import DocLink from '../extractionMEDiml/docLink'
+import ExtractionSettingsCard, { defaultSettingsSource } from '../extractionMEDiml/ExtractionSettingsCard'
 import SourcePicker from '../extractionMEDiml/SourcePicker'
 import { ErrorRequestContext } from '../generalPurpose/errorRequestContext'
 import Disclosure from '../primitives/Disclosure'
@@ -59,6 +61,9 @@ const EXTRACT_DATASET = {
 
 const DEFAULT_N_CORES = 12
 
+/** Name of the copy of the run's settings written into the save folder. */
+const SETTINGS_SNAPSHOT_NAME = "extraction_settings.json"
+
 const BatchExtractor = ({ pageId, configPath = "" }) => {
   const { port } = useContext(WorkspaceContext) // Get the port of the backend
   const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
@@ -67,17 +72,16 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
   const relevantIds = useMEDDataObjectsByType(["directory", "csv", "json"])
   const { setError } = useContext(ErrorRequestContext) // Get the function to set the error request
   const [progress, setProgress] = useState(0)
-  const [loadingEdit, setLoadingEdit] = useState(false)
   const [refreshEnabled, setRefreshEnabled] = useState(false) // A boolean variable to control refresh
   const [selectedReadFolder, setSelectedReadFolder] = useState('')
   const [selectedSaveFolder, setSelectedSaveFolder] = useState('')
   const [selectedNBatch, setSelectedNBatch] = useState(DEFAULT_N_CORES)
   const [selectedCSVFile, setSelectedCSVFile] = useState('')
-  const [selectedSettingsFile, setSelectedSettingsFile] = useState('')
   const [listWSFolders, setListWSFolders] = useState([]) // List of folders in the workspace
   const [listCSVFiles, setListCSVFiles] = useState([]) // List of csv files in the workspace
   const [listSettingsFiles, setListSettingsFiles] = useState([]) // List of settings files in the workspace
-  const [settings, setSettings] = useState({}) // Settings of the node
+  const [settings, setSettings] = useState(getDefaultExtractionSettings) // Extraction settings in use
+  const [settingsSource, setSettingsSource] = useState(defaultSettingsSource) // Where the settings come from, see ExtractionSettingsCard
   const [nscans, setNscans] = useState(0) // Number of scans to be processed
   const [skipExisting, setSkipExisting] = useState(false) // Skip existing extractions
   const [activeIndex, setActiveIndex] = useState(false)
@@ -151,17 +155,6 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
   const handleNBatchChange = (event) => {
     const n_batch = event.target.value;
     setSelectedNBatch(parseInt(n_batch));
-  };
-
-  const handleSettingsFileChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-      setSelectedSettingsFile(fileList)
-    }
-    else {
-      setSelectedSettingsFile(event.target.files.path)
-    }
   };
 
   const handleCSVFileChange = (event) => {
@@ -257,47 +250,34 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
     }
   }
 
+  /**
+   * @description Opens the settings editor. It edits a copy, so the settings in use only change on Apply.
+   */
   const handleEditClick = () => {
-    setLoadingEdit(true)
-    // Make a POST request to the backend API
-    requestBackend(
-      port, 
-      '/extraction_MEDiml/run_all/be_json', 
-      {selectedSettingsFile}, 
-      (response) => {
-        console.log("response", response)
-        setLoadingEdit(false)
-        if (response.error) {
-          console.error('Error:', response.error)
-          toast.error('Error: ' + response.error)
-          setShowEdit(false)
-          // eslint-disable-next-line no-prototype-builtins
-          if (!response.error.hasOwnProperty('message')) {
-            setError({"message": response.error})
-          } else {
-            setError(response.error)
-          }
-        } else {
-          // Handle the response from the backend if needed
-          console.log('Response from backend:', response)
+    setShowEdit(true)
+  }
 
-          // set settings
-          setSettings(response)
+  /**
+   * @description Uses the settings chosen in the settings card.
+   * @param {Object} nextSettings - The settings to use
+   * @param {Object} nextSource - Where they come from
+   */
+  const handleSettingsChange = (nextSettings, nextSource) => {
+    setSettings(nextSettings)
+    setSettingsSource(nextSource)
+  }
 
-          // show edit dialog
-          setShowEdit(true)
-
-          // toast message
-          toast.success('Settings loaded!')
-        }
-      },
-      (error) => {
-        setLoadingEdit(false)
-        console.error('Error:', error)
-        toast.error('Error: ' + error)
-        setShowEdit(false)
-      }
-    )
+  /**
+   * @description Writes the settings of this run into the save folder and returns their path.
+   * MEDiml reads the settings from a file, and the copy records how the results were made.
+   * The Cores field is written as n_batch, since a n_batch in the file would override it.
+   * @returns {Promise<string>} Path of the written settings file
+   */
+  const writeSettingsSnapshot = async () => {
+    const snapshotPath = require('path').join(selectedSaveFolder, SETTINGS_SNAPSHOT_NAME)
+    const nBatch = Number.isInteger(selectedNBatch) && selectedNBatch > 0 ? selectedNBatch : DEFAULT_N_CORES
+    await fs.promises.writeFile(snapshotPath, JSON.stringify({ ...settings, n_batch: nBatch }, null, 4))
+    return snapshotPath
   }
 
   const handleOpenFolderClick = () => {
@@ -307,10 +287,19 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
 
   const handleRunClick = async () => {
 
+    let pathParams
+    try {
+      pathParams = await writeSettingsSnapshot()
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error('Could not write the extraction settings to the save folder: ' + error.message)
+      return
+    }
+
     // Create an object with the input values
     const requestData = {
       path_read: selectedReadFolder,
-      path_params: selectedSettingsFile,
+      path_params: pathParams,
       path_csv: selectedCSVFile,
       path_save: selectedSaveFolder,
       n_batch: parseInt(selectedNBatch),
@@ -442,13 +431,32 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
   }, [refreshEnabled, nscans, saveFolder]); // The empty dependency array ensures this effect runs only once when the component mounts
 
   /**
-   * @returns {JSX.Element} A dialog to edit extraction options
-   * @description This function is used to render the dialog to edit extraction options.
+   * @description Uses the edited settings and tells the user whether anything changed.
+   * @param {Object} edited - The settings returned by the editor
+   */
+  const handleApplySettings = (edited) => {
+    setShowEdit(false)
+    if (sameSettings(edited, settings)) {
+      toast.info('No changes to apply')
+      return
+    }
+    setSettings(edited)
+    toast.success('Extraction settings applied. They will be used for the next run.')
+  }
+
+  /**
+   * @returns {JSX.Element} The side panel to edit the extraction settings
+   * @description Mounted only while open, so each opening starts from the settings in use.
    */
   const renderEdit = () => {
-    if (selectedSettingsFile && showEdit) {
+    if (showEdit) {
       return (
-        <SettingsEditor showEdit={showEdit} setShowEdit={setShowEdit} settings={settings} pathSettings={selectedSettingsFile} onHideBE={setLoadingEdit}/>
+        <SettingsEditor
+          visible={showEdit}
+          settings={settings}
+          onHide={() => setShowEdit(false)}
+          onApply={handleApplySettings}
+        />
       )
     }
   }
@@ -569,40 +577,15 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
         />
       </SectionCard>
 
-      {/* UPLOAD SETTINGS FILE*/}
-      <SectionCard
-        row
-        title="Extraction settings"
-        hint="JSON file describing how features are computed: interpolation, re-segmentation, discretisation, the filters to apply and which feature families to extract."
-        docHref={MEDIML_DOCS.featuresExtraction}
-      >
-        <SourcePicker
-          mode={useWorkspace ? "workspace" : "local"}
-          kind="file"
-          accept=".json"
-          name="path_params"
-          options={listSettingsFiles}
-          value={selectedSettingsFile}
-          onPathChange={setSelectedSettingsFile}
-          onLocalChange={handleSettingsFileChange}
-          placeholder="Select a file"
-          action={
-            <Button
-              type="button"
-              severity="info"
-              label="Edit"
-              name="EditSettingsButton"
-              onClick={handleEditClick}
-              disabled={(!selectedSettingsFile)}
-              loading={loadingEdit}
-              icon="pi pi-pencil"
-              iconPos="left"
-              raised
-              rounded
-            />
-          }
-        />
-      </SectionCard>
+      {/* EXTRACTION SETTINGS */}
+      <ExtractionSettingsCard
+        settings={settings}
+        source={settingsSource}
+        onChange={handleSettingsChange}
+        onEdit={handleEditClick}
+        useWorkspace={useWorkspace}
+        workspaceFiles={listSettingsFiles}
+      />
 
 
         {/* UPLOAD CSV FILE*/}
@@ -784,7 +767,6 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
             !selectedReadFolder ||
             !selectedSaveFolder ||
             refreshEnabled ||
-            !selectedSettingsFile ||
             (analyzeDoseMaps && (!selectedPredDosesCSV || !prescDoseColumn.trim()))
           )}
           icon="pi pi-play"

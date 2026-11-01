@@ -63,7 +63,7 @@ const extractionDefaultSettings = {
     }
   },
   re_segmentation: {
-    range: [-1000, 400],
+    range: [-100, 300],
     outliers: ""
   },
   discretization: {

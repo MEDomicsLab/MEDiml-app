@@ -1,9 +1,8 @@
-import { ExternalLink, X } from "lucide-react"
-import { useEffect, useId, useRef } from "react"
-import { createPortal } from "react-dom"
+import { ExternalLink } from "lucide-react"
 import styles from "./DocPanel.module.css"
 import hintStyles from "./Hint.module.css"
 import openDocs from "./openDocs"
+import SidePanel from "./SidePanel"
 
 /**
  * A side panel of in-app documentation, for a concept that a one-paragraph hint
@@ -15,10 +14,8 @@ import openDocs from "./openDocs"
  * by the `.content` rules in DocPanel.module.css -- write semantic markup
  * (h3, p, ul, dl, table) and it will look right here.
  *
- * NON-MODAL on purpose: it docks on the right without a backdrop, so the form
- * stays usable while the user reads -- they can keep the feature list open
- * while filling in the parameters it describes. Escape or the close button
- * dismisses it, and focus returns to whatever opened it.
+ * The frame (docking, header, Escape, focus return) is <SidePanel>, shared with
+ * the in-app editors so both look and behave the same.
  *
  * Usually opened through useHint's `doc` option rather than rendered directly.
  *
@@ -29,51 +26,18 @@ import openDocs from "./openDocs"
  * @param {string} docHref Full documentation page, linked at the end of the panel.
  * @param {string} docLabel Link text.
  */
-const DocPanel = ({ open, onClose, title, children, docHref, docLabel = "Read the full documentation" }) => {
-  const titleId = `${useId()}-title`
-  const closeRef = useRef(null)
-
-  useEffect(() => {
-    if (!open) return undefined
-    const opener = document.activeElement
-    closeRef.current?.focus()
-
-    const onKeyDown = (event) => {
-      if (event.key === "Escape") onClose()
-    }
-    document.addEventListener("keydown", onKeyDown)
-    return () => {
-      document.removeEventListener("keydown", onKeyDown)
-      if (opener && typeof opener.focus === "function") opener.focus()
-    }
-  }, [open, onClose])
-
-  if (!open || typeof document === "undefined") return null
-
-  return createPortal(
-    <aside className={styles.panel} role="dialog" aria-modal="false" aria-labelledby={titleId}>
-      <header className={styles.header}>
-        <h2 id={titleId} className={styles.title}>
-          {title}
-        </h2>
-        <button ref={closeRef} type="button" className={styles.close} onClick={onClose} aria-label="Close documentation">
-          <X size={16} aria-hidden="true" />
-        </button>
-      </header>
-      <div className={styles.content}>
-        {children}
-        {docHref && (
-          <p>
-            <a className={hintStyles.docLink} href={docHref} onClick={(event) => openDocs(event, docHref)}>
-              {docLabel}
-              <ExternalLink size={12} aria-hidden="true" />
-            </a>
-          </p>
-        )}
-      </div>
-    </aside>,
-    document.body
-  )
-}
+const DocPanel = ({ open, onClose, title, children, docHref, docLabel = "Read the full documentation" }) => (
+  <SidePanel open={open} onClose={onClose} title={title} closeLabel="Close documentation" bodyClassName={styles.content}>
+    {children}
+    {docHref && (
+      <p>
+        <a className={hintStyles.docLink} href={docHref} onClick={(event) => openDocs(event, docHref)}>
+          {docLabel}
+          <ExternalLink size={12} aria-hidden="true" />
+        </a>
+      </p>
+    )}
+  </SidePanel>
+)
 
 export default DocPanel
