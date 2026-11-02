@@ -1,7 +1,7 @@
 <img src="MEDimlLogo.png" width="100" align="right" align="top" >
 <br />
 
-# MEDiml - The application
+# MEDiml: MEDical Image analysis with Machine Learning | The application
 
 MEDiml-app is a desktop application for extracting radiomics and dosiomics features from medical images without writing code. It provides a graphical user interface to the [MEDiml Python package](https://github.com/MEDomicsLab/MEDiml-pkg) and is part of the [MEDomics](https://github.com/MEDomicsLab/MEDomics) project.
 
