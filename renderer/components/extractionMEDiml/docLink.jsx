@@ -1,6 +1,5 @@
-import React from "react"
-import { Image } from "react-bootstrap"
 import { shell } from "electron"
+import { CircleAlert } from "lucide-react"
 
 /**
  * @param {string} link - Link to the documentation
@@ -28,7 +27,8 @@ const DocLink = ({ linkString, name, image }) => {
   return (
     <>
       <p className="docLink" style={{marginTop: "10px"}}>
-        {<img src={image} alt="Documentation" width="24" height="24"/>}
+        {image && <img src={image} alt="Documentation" width="24" height="24"/>}
+        {!image && <CircleAlert alt="Documentation" width="24" height="24"/>}
         <u><a href={linkString} onClick={handleLinkClick}>
           {name}
         </a></u>

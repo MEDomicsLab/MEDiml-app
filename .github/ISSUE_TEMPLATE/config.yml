@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and discussion (Discord)
+    url: https://discord.gg/ZbaGj8E6mP
+    about: Ask questions and discuss MEDiml-app with the MEDomics community.
+  - name: Documentation
+    url: https://medomicslab.gitbook.io/mediml-app-docs
+    about: Installation guide, tutorials and explanations of each module.
+  - name: MEDiml package issues
+    url: https://github.com/MEDomicsLab/MEDiml-pkg/issues
+    about: Report problems with the feature computation itself (the MEDiml Python package).

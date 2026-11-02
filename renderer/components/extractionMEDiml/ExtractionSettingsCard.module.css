@@ -1,0 +1,22 @@
+/* ExtractionSettingsCard -- see ExtractionSettingsCard.jsx. */
+
+/* Edit / Save a copy / Reset, kept together beside the status line. */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--med-space-2);
+}
+
+.paste {
+  width: 100%;
+  font-family: var(--med-font-mono);
+  font-size: var(--med-text-sm);
+}
+
+/* Validation messages: one per line, no bullets, under the control. */
+.messages {
+  margin: var(--med-space-1) 0 0;
+  padding: 0;
+  list-style: none;
+}

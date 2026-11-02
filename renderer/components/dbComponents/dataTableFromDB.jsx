@@ -14,10 +14,9 @@ import React, { useContext, useEffect, useState } from "react"
 import { toast } from "react-toastify"
 import { requestBackend } from "../../utilities/requests"
 import { LayoutModelContext } from "../layout/layoutContext"
-import { connectToMongoDB, getCollectionTags, insertMEDDataObjectIfNotExists } from "../mongoDB/mongoDBUtils"
+import { collectionExists, connectToMongoDB, getCollectionData, getCollectionTags, insertMEDDataObjectIfNotExists } from "../mongoDB/mongoDBUtils"
 import { ServerConnectionContext } from "../serverConnection/connectionContext"
 import { MEDDataObject } from "../workspace/NewMedDataObject"
-import { collectionExists, getCollectionData } from "./utils"
 
 /**
  * DataTableFromDB component

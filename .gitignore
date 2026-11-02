@@ -143,9 +143,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# submodules
-/flask_server/submodules/MEDiml/*
-/flask_server/submodules/MEDprofiles/*
+# Python environment installed by the app when run from source (npm run dev)
+/python/
 
 
 # custom gitignore
@@ -165,5 +164,7 @@ path2condaenv_toDeleteInProd.txt
 gh_token.txt
 package-lock.json
 pythonCode/local_dir/*
+.css-snapshot-fixture.html
+css-snapshot*.json
 
 !*.gitkeep

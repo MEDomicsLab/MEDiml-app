@@ -11,11 +11,27 @@ import { LayoutModelProvider } from "../components/layout/layoutContext"
 import LayoutManager from "../components/layout/layoutManager"
 import { ServerConnectionProvider } from "../components/serverConnection/connectionContext"
 import { DataContextProvider } from "../components/workspace/dataContext"
+import { medDataStore } from "../components/workspace/medDataStore"
 import { MEDDataObject } from "../components/workspace/NewMedDataObject"
 import { WorkspaceProvider } from "../components/workspace/workspaceContext"
-import { loadMEDDataObjects, updateGlobalData } from "../utilities/appUtils/globalDataUtils"
+import { resetConnection } from "../components/workspace/data/MongoConnection"
+import { flattenWorkspaceTree, syncWorkspaceTree } from "../components/workspace/data/WorkspaceSync"
 
 // CSS
+//
+// Layer order matters and is deliberate:
+//   1. tokens      design tokens only, no rules -- must be defined before
+//                  anything can reference them
+//   2. vendor      bootstrap, primereact, blueprint, flexlayout, ...
+//   3. base        globals.css: resets and app-wide structural classes
+//   4. features    per-module stylesheets, which may override the base
+//   5. bridge      customPrimeReact.css, which must come after the vendor
+//                  theme it adjusts
+
+// 1. tokens
+import "../styles/tokens.css"
+
+// 2. vendor
 import "bootstrap/dist/css/bootstrap.min.css"
 // import 'bootswatch/dist/lux/bootstrap.min.css';
 import "react-simple-tree-menu/dist/main.css"
@@ -35,7 +51,10 @@ import "flexlayout-react/style/light.css"
 import "react-complex-tree/lib/style-modern.css"
 import "react-contexify/dist/ReactContexify.css"
 
-// --my styles (priority over bootstrap and other dist styles)
+// 3. base -- first app stylesheet, so feature styles below can override it
+import "../styles/globals.css"
+
+// 4. features (priority over bootstrap and other dist styles)
 import "../styles/application/application.css"
 import "../styles/customPrimeReact.css"
 import "../styles/datatableWrapper.css"
@@ -46,7 +65,6 @@ import "../styles/extraction/extractionMEDiml.css"
 import "../styles/extraction/extractionTabular.css"
 import "../styles/flow/reactFlow.css"
 import "../styles/flow/results.css"
-import "../styles/globals.css"
 import "../styles/iconSidebar.css"
 import "../styles/imageContainer.css"
 import "../styles/input/MEDprofiles.css"
@@ -146,7 +164,9 @@ function App() {
   const [recentWorkspaces, setRecentWorkspaces] = useState([]) // The list of recent workspaces
   const [port, setPort] = useState() // The port of the server
 
-  const [globalData, setGlobalData] = useState({}) // The global data object
+  // Workspace metadata (the old `globalData`) now lives in medDataStore.js, a per-id subscription
+  // store, instead of a single top-level React state - see dataContext.jsx for the compatibility
+  // shim still-unmigrated components read it through.
 
   /**
    * @ReadMe
@@ -165,11 +185,16 @@ function App() {
     })
 
     ipcRenderer.on("setWorkingDirectoryInApp", (event, data) => {
-      ipcRenderer.invoke("setWorkingDirectory", data).then((data) => {
-        if (workspaceObject !== data) {
-          let workspace = { ...data }
-          setWorkspaceObject(workspace)
-        }
+      // The main process is about to stop the current embedded mongod and start a new one
+      // against the new workspace's dbPath (same port) - forget the cached client/index state
+      // now so the next Mongo call reconnects instead of silently talking to the old topology.
+      resetConnection().then(() => {
+        ipcRenderer.invoke("setWorkingDirectory", data).then((data) => {
+          if (workspaceObject !== data) {
+            let workspace = { ...data }
+            setWorkspaceObject(workspace)
+          }
+        })
       })
     })
 
@@ -211,11 +236,15 @@ function App() {
     }
   }, []) // Here, we specify that the hook should only be called at the launch of the app
 
-  // This useEffect hook is called whenever the `globalData` state changes.
+  // Runs once per workspace-data change (medDataStore's "*" key - see medDataStore.js), instead
+  // of a `[globalData]`-keyed effect: verifyLockedObjects only needs to run once per change, not
+  // once per re-render of every component that happens to read globalData.
   useEffect(() => {
-    console.log("globalData changed", globalData)
-    MEDDataObject.verifyLockedObjects(globalData)
-  }, [globalData])
+    return medDataStore.subscribe("*", () => {
+      console.log("globalData changed")
+      MEDDataObject.verifyLockedObjects(medDataStore.snapshot())
+    })
+  }, [])
 
   // This useEffect hook is called whenever the `layoutModel` state changes.
   useEffect(() => {
@@ -226,9 +255,10 @@ function App() {
   // This useEffect hook is called whenever the `workspaceObject` state changes.
   useEffect(() => {
     async function getGlobalData() {
-      await updateGlobalData(workspaceObject)
-      const newGlobalData = await loadMEDDataObjects()
-      setGlobalData(newGlobalData)
+      const rootNode = workspaceObject.workingDirectory
+      const fsEntries = flattenWorkspaceTree(rootNode)
+      const newGlobalData = await syncWorkspaceTree(fsEntries, rootNode.path, rootNode.name)
+      medDataStore.reconcile(newGlobalData)
     }
     if (workspaceObject.hasBeenSet == true) {
       console.log("workspaceObject changed", workspaceObject)
@@ -248,7 +278,7 @@ function App() {
         <HotkeysProvider>
           <ActionContextProvider>
             <NotificationContextProvider>
-              <DataContextProvider globalData={globalData} setGlobalData={setGlobalData}>
+              <DataContextProvider>
                 <WorkspaceProvider
                   workspace={workspaceObject}
                   setWorkspace={setWorkspaceObject}

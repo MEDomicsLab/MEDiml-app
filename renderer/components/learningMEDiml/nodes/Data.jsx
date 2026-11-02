@@ -4,8 +4,32 @@ import React, { useContext, useEffect, useState } from "react"
 import { Alert, Col, Form, Row } from "react-bootstrap"
 import { toast } from 'react-toastify'
 import Node, { updateHasWarning } from "../../flow/node"
-import { DataContext } from "../../workspace/dataContext"
+import { useMEDDataObjectsByType, useMEDDataStore } from "../../workspace/useMEDData"
+import { WorkspaceContext } from "../../workspace/workspaceContext"
 import { set } from "lodash"
+import Caption from '../../primitives/Caption'
+import { sectionCardClass } from '../../primitives/SectionCard'
+import styles from "./Data.module.css"
+
+/**
+ * @param {string} folderPath Full path of a folder
+ * @param {string} workspacePath Full path of the workspace
+ * @returns {string} The folder path relative to the workspace (e.g. /DATA/STS_POC/Features/CT), or the
+ *   full path if the folder is outside the workspace
+ */
+const getFolderLocation = (folderPath, workspacePath) => {
+  const location = (folderPath || "").replace(/\\/g, "/")
+  const root = (workspacePath || "").replace(/\\/g, "/").replace(/\/+$/, "")
+  return root && location.toLowerCase().startsWith(root.toLowerCase() + "/") ? location.slice(root.length) : location
+}
+
+/** Folder name with its location underneath, so folders sharing a name can be told apart. */
+const folderOptionTemplate = (option) => (
+  <div className={styles.folderOption}>
+    <span>{option.name}</span>
+    <span className={styles.folderPath}>{option.location}</span>
+  </div>
+)
 
 /**
  * @param {string} id id of the node
@@ -19,11 +43,15 @@ import { set } from "lodash"
  */
 const Data = ({ id, data, type }) => {  
   const [reload, setReload] = useState(false)
-  const [featuresFiles, setFeaturesFiles] = useState([])
-  const [selectedFolder, setSelectedFolder] = useState("") // Selected folder
+  const [featuresFiles, setFeaturesFiles] = useState(Array.isArray(data.internal.settings.featuresFiles) ? data.internal.settings.featuresFiles : [])
+  const [selectedFolder, setSelectedFolder] = useState(data.internal.settings.path || "") // Selected folder
   const [listWSFolders, setListWSFolders] = useState([]) // List of folders in the workspace
   const [listCSVFiles, setListCSVFiles] = useState([]) // List of csv files in the workspace
-  const { globalData } = useContext(DataContext) // We get the global data from the context
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
+  const { workspace } = useContext(WorkspaceContext)
+  // Re-run updateWSfolder only when the set of directories/csv files actually changes, instead of
+  // on every unrelated workspace change.
+  const relevantIds = useMEDDataObjectsByType(["directory", "csv"])
   const sectionStyle = {
     marginBottom: "16px",
     paddingBottom: "12px",
@@ -33,8 +61,7 @@ const Data = ({ id, data, type }) => {
 
   useEffect(() => {
     if (!data.setupParam.possibleSettings.defaultSettings.featuresFiles.length){
-      data.setupParam.possibleSettings.defaultSettings.featuresFiles = data.internal.settings.featuresFiles
-      setFeaturesFiles(data.internal.settings.featuresFiles)
+      saveFeaturesFiles(data.internal.settings.featuresFiles)
     }
     if (!data.setupParam.possibleSettings.defaultSettings.path) {
       data.setupParam.possibleSettings.defaultSettings.path = data.internal.settings.path
@@ -48,17 +75,24 @@ const Data = ({ id, data, type }) => {
   
   useEffect(() => {
     updateWSfolder()
-  }, [globalData])
+  }, [relevantIds])
 
   const updateWSfolder = () => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let wsFolders = []
       keys.forEach((key) => {
         if (globalData[key].type === "directory" && !globalData[key].name.startsWith(".")) {
-          wsFolders.push({ name: globalData[key].name, value: globalData[key].path })
+          wsFolders.push({
+            name: globalData[key].name,
+            value: globalData[key].path,
+            location: getFolderLocation(globalData[key].path, workspace?.workingDirectory?.path)
+          })
         }
       })
+      // Sorted by location, so folders sharing a name are listed by where they are
+      wsFolders.sort((a, b) => a.location.localeCompare(b.location))
       setListWSFolders(wsFolders)
       if (selectedFolder) {
         handleSaveFolderChange(selectedFolder)
@@ -68,8 +102,18 @@ const Data = ({ id, data, type }) => {
     }
   }
 
+  /** Saves the selected features files, always as a list (never null) */
+  const saveFeaturesFiles = (files) => {
+    const selectedFiles = Array.isArray(files) ? files : []
+    setFeaturesFiles(selectedFiles)
+    data.setupParam.possibleSettings.defaultSettings.featuresFiles = selectedFiles
+    data.internal.settings.featuresFiles = selectedFiles
+    updateHasWarning(data)
+  }
+
   const handleSaveFolderChange = (directoryPath) => {
     setSelectedFolder(directoryPath)
+    const globalData = medDataStore.snapshot()
     let csvFiles = []
     let keys = Object.keys(globalData)
     let folderID = keys.filter(key => globalData[key].path === directoryPath)
@@ -88,7 +132,11 @@ const Data = ({ id, data, type }) => {
     data.setupParam.possibleSettings.defaultSettings.path = directoryPath
     data.internal.settings.path = directoryPath
     data.setupParam.csv_files = csvFiles
-    updateHasWarning(data)
+    // Keep only the selected files found in the folder: an imported scene (or a change of folder) can hold
+    // files missing here, which the MultiSelect shows as null and which would still be sent to the backend
+    const availableFiles = new Set(csvFiles.map((file) => file.value))
+    const savedFiles = Array.isArray(data.internal.settings.featuresFiles) ? data.internal.settings.featuresFiles : []
+    saveFeaturesFiles(savedFiles.filter((file) => availableFiles.has(file)))
     setReload(!reload)
   }
 
@@ -102,7 +150,7 @@ const Data = ({ id, data, type }) => {
         setupParam={data.setupParam}
         nodeSpecific={
           <>
-            <Row className="form-group-box" style={{ textAlign: "center", alignItems: "center", justifyContent: "center" }}>
+            <Row className={sectionCardClass} style={{ alignItems: "center", justifyContent: "center" }}>
             <Col>
             {/* nameType */}
             {/*<Form.Group controlId="nameType">
@@ -128,7 +176,7 @@ const Data = ({ id, data, type }) => {
             {/* path features */}
             <Form.Group controlId="FeaturePath" style={sectionStyle}>
               <Form.Label className="FeaturePath">Features Folder Name</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Select the folder containing feature files for training.</p>
+              <Caption>Select the folder containing feature files for training.</Caption>
               <Col style={{ width: "300px", margin: "0 auto", display: "block", textAlign: "center" }}>
                 <Dropdown
                   style={{ maxWidth: "100%", height: "auto", width: "auto" }}
@@ -137,7 +185,8 @@ const Data = ({ id, data, type }) => {
                   onChange={(e) => handleSaveFolderChange(e.value)}
                   options={listWSFolders}
                   optionLabel="name"
-                  display="chip"
+                  itemTemplate={folderOptionTemplate}
+                  valueTemplate={(option, props) => (option ? folderOptionTemplate(option) : props.placeholder)}
                   placeholder="Select a folder"
                 />
               </Col>
@@ -152,17 +201,14 @@ const Data = ({ id, data, type }) => {
             {(listCSVFiles.length > 0) && (
             <Form.Group controlId="selectFeaturesFiles" style={lastSectionStyle}>
               <Form.Label className="selectFiles" style={{ marginTop: "10px" }}>Select Features Files</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Choose which feature files to use for model training.</p>
+              <Caption>Choose which feature files to use for model training.</Caption>
               <MultiSelect
                 style={{ maxWidth: "100%", height: "auto", width: "auto" }}
                 value={featuresFiles} 
                 onChange={(e) => {
-                  setFeaturesFiles(e.value)
-                  data.setupParam.possibleSettings.defaultSettings.featuresFiles = e.value
-                  data.internal.settings.featuresFiles = e.value
-                  updateHasWarning(data)
+                  saveFeaturesFiles(e.value)
                   setReload(!reload)
-                }} 
+                }}
                 options={listCSVFiles} 
                 optionLabel="name" 
                 filter 

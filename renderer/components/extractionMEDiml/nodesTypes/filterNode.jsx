@@ -1,15 +1,15 @@
 /* eslint-disable camelcase */
-import React, { useState, useCallback, useContext, useEffect } from "react"
-import Node from "../../flow/node"
-import { Form, Row, Col } from "react-bootstrap"
-import ViewButton from "../buttonsTypes/viewButton"
+import { useCallback, useContext, useEffect, useState } from "react"
+import { Col, Form, Row } from "react-bootstrap"
 import { FlowFunctionsContext } from "../../flow/context/flowFunctionsContext"
+import Node from "../../flow/node"
+import ViewButton from "../buttonsTypes/viewButton"
 
 // Importing the different forms for the filter types
-import MeanFilter from "./filterTypes/meanFilter"
-import LogFilter from "./filterTypes/logFilter"
-import LawsFilter from "./filterTypes/lawsFilter"
 import GaborFilter from "./filterTypes/gaborFilter"
+import LawsFilter from "./filterTypes/lawsFilter"
+import LogFilter from "./filterTypes/logFilter"
+import MeanFilter from "./filterTypes/meanFilter"
 import WaveletFilter from "./filterTypes/waveletFilter"
 
 // TODO : all the filter nodes should become standard nodes eventually
@@ -61,7 +61,6 @@ const FilterNode = ({ id, data, type }) => {
     (event) => {
       const { name, value, type } = event.target
       data.internal.settings[selectedFilter][name] = type === "number" && !isNaN(value) ? parseFloat(value) : value
-      console.log("data.internal.settings[selectedFilter]: ", data.internal.settings[selectedFilter])
       updateNode({
         id: id,
         updatedData: data.internal

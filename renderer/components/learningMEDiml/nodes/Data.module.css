@@ -1,0 +1,14 @@
+/* Features folder option: folder name with its workspace path underneath,
+   so folders sharing a name (e.g. two "CT" folders) can be told apart. */
+.folderOption {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  text-align: left;
+}
+
+.folderPath {
+  font-size: var(--med-text-xs);
+  color: var(--med-text-secondary);
+  overflow-wrap: anywhere;
+}

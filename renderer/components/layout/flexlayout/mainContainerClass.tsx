@@ -21,12 +21,12 @@ import {
   TabSetNode
 } from "flexlayout-react"
 import fs from "fs"
+import { Braces, BrainCircuit, Briefcase, Component, File, FileCode, FileCode2, FileImage, FileJson, FileSpreadsheet, FileText, Layers, Pickaxe, SquareArrowRightExit, SquareTerminal } from "lucide-react"
 import Image from "next/image"
 import { confirmDialog } from "primereact/confirmdialog"
 import * as Prism from "prismjs"
 import "prismjs/themes/prism-coy.css"
 import * as React from "react"
-import * as Icons from "react-bootstrap-icons"
 import Iframe from "react-iframe"
 import { toast } from "react-toastify"
 import { getPathSeparator, loadCSVFromPath, loadJSONFromPath, loadJsonPath, loadXLSXFromPath } from "../../../utilities/fileManagementUtils"
@@ -45,14 +45,13 @@ import OutputPage from "../../mainPages/output"
 import SettingsPage from "../../mainPages/settings"
 import TerminalPage from "../../mainPages/terminal"
 import { updateMEDDataObjectName, updateMEDDataObjectPath } from "../../mongoDB/mongoDBUtils"
-import { DataContext } from "../../workspace/dataContext"
+import { medDataStore } from "../../workspace/medDataStore"
 import { MEDDataObject } from "../../workspace/NewMedDataObject"
 import { LayoutModelContext } from "../layoutContext"
 import { showPopup } from "./popupMenu"
 import { TabStorage } from "./tabStorage"
 import { Utils } from "./utils"
 import ZoomPanPinchComponent from "./zoomPanPinchComponent"
-import { Braces, BrainCircuit, Briefcase, Component, Layers, Pickaxe, SquareArrowRightExit, SquareTerminal } from "lucide-react"
 
 var fields = ["Name", "Field1", "Field2", "Field3", "Field4", "Field5"]
 
@@ -82,11 +81,6 @@ interface LayoutContextType {
   setIsEditorOpen: (value: boolean) => void
 }
 
-interface DataContextType {
-  globalData: any
-  setGlobalData: (value: any) => void
-}
-
 interface MyComponentProps {
   // add props here
 }
@@ -103,15 +97,12 @@ interface MyComponentState {
  */
 const MainContainer = (props) => {
   const { layoutRequestQueue, setLayoutRequestQueue, setIsEditorOpen, isEditorOpen } = React.useContext(LayoutModelContext) as unknown as LayoutContextType
-  const { globalData, setGlobalData } = React.useContext(DataContext) as unknown as DataContextType
   return (
-    <MainInnerContainer 
-      layoutRequestQueue={layoutRequestQueue} 
-      setLayoutRequestQueue={setLayoutRequestQueue} 
-      globalData={globalData} 
+    <MainInnerContainer
+      layoutRequestQueue={layoutRequestQueue}
+      setLayoutRequestQueue={setLayoutRequestQueue}
       setIsEditorOpen={setIsEditorOpen}
       isEditorOpen={isEditorOpen}
-      setGlobalData={setGlobalData} 
     />
 )
 }
@@ -551,9 +542,8 @@ class MainInnerContainer extends React.Component<any, { layoutFile: string | nul
         toast.error("Please close the editor before renaming")
         return Actions.RENAME_TAB
       }
-      const { globalData, setGlobalData } = this.props as DataContextType
       let newName = action.data.text
-      let medObject = globalData[action.data.node]
+      let medObject = medDataStore.get(action.data.node)
       console.log("medObject", medObject)
       if (medObject) {
         // Check name is not empty
@@ -598,9 +588,12 @@ class MainInnerContainer extends React.Component<any, { layoutFile: string | nul
         // Update the local filename
         if (medObject.inWorkspace) {
           fs.renameSync(oldPath, newPath)
-          // Update the workspace data object
-          MEDDataObject.updateWorkspaceDataObject()
         }
+        // Update the in-memory record unconditionally - this must happen for MongoDB-only tabs
+        // too, not just ones with a local file (same fix as MEDDataObject.rename()).
+        medObject.name = newName
+        medObject.path = newPath
+        MEDDataObject.updateWorkspaceDataObject()
       }
     } else if (action.type === Actions.DELETE_TAB && this.saved[action.data.node] === false) {
       return confirmDialog({
@@ -772,13 +765,7 @@ class MainInnerContainer extends React.Component<any, { layoutFile: string | nul
       if (node.getExtraData().data == null) {
         const dfd = require("../../../utilities/danfo.js")
         const whenDataLoaded = (data) => {
-          const { globalData, setGlobalData } = this.props as DataContextType
-          let globalDataCopy = globalData
-          if (globalDataCopy[config.uuid] !== undefined) {
-            globalDataCopy[config.uuid].setData(new dfd.DataFrame(data))
-            setGlobalData(globalDataCopy)
-          }
-          node.getExtraData().data = dfd.toJSON(globalDataCopy[config.uuid].data, { format: "column" })
+          node.getExtraData().data = dfd.toJSON(new dfd.DataFrame(data), { format: "column" })
         }
         let extension = config.extension
         if (extension === undefined) {
@@ -803,8 +790,6 @@ class MainInnerContainer extends React.Component<any, { layoutFile: string | nul
               sortable: true
             }}
             config={{ ...config }}
-            globalData={this.props.globalData}
-            setGlobalData={this.props.setGlobalData}
           />
         </>
       )
@@ -946,36 +931,33 @@ class MainInnerContainer extends React.Component<any, { layoutFile: string | nul
    */
   returnIconFromComponent(component: string, config?: any) {
     if (config !== undefined && config !== null && config !== "" && config?.path !== undefined && config?.path !== null && config?.path !== "") {
-      let extension = config.path.split(".").pop()
-      let iconToReturn = null
       switch (extension) {
         case "csv":
-          return <Icons.FiletypeCsv />
+          return <FileSpreadsheet style={{ marginRight: 3 }} size={16} />
         case "json":
-          return <Icons.FiletypeJson />
+          return <FileJson style={{ marginRight: 3 }} size={16} />
         case "txt":
-          return <Icons.FiletypeTxt />
+          return <FileText style={{ marginRight: 3 }} size={16} />
         case "pdf":
-          return <Icons.FiletypePdf />
+          return <File style={{ marginRight: 3 }} size={16} />
         case "png":
-          return <Icons.FiletypePng />
+          return <FileImage style={{ marginRight: 3 }} size={16} />
         case "jpg":
-          return <Icons.FiletypeJpg />
+          return <FileImage style={{ marginRight: 3 }} size={16} />
         case "jpeg":
-          return <Icons.FiletypeJpg />
+          return <FileImage style={{ marginRight: 3 }} size={16} />
         case "py":
-          return <Icons.FiletypePy />
+          return <FileCode style={{ marginRight: 3 }} size={16} />
         case "ipynb":
-          return <Icons.FiletypePy />
+          return <FileCode style={{ marginRight: 3 }} size={16} />
         case "html":
-          return <Icons.FiletypeHtml />
+          return <FileCode2 style={{ marginRight: 3 }} size={16} />
         case "xlsx":
-          return <Icons.FiletypeXlsx />
+          return <FileSpreadsheet style={{ marginRight: 3 }} size={16} />
         case "xls":
-          return <Icons.FiletypeXls />
+          return <FileSpreadsheet style={{ marginRight: 3 }} size={16} />
       }
-      let icon = <span style={{ marginRight: 3 }}>{iconToReturn}</span>
-      return icon
+      return null
     } else {
       if (component === "InputToolsDB" || component === "inputPage" || component === "dataTableFromDB") {
         return <span style={{ marginRight: 3 }}>🛢️</span>

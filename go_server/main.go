@@ -5,6 +5,7 @@ import (
 	"fmt"
 	ExtractionMEDiml "go_module/blueprints/extractionMEDiml"
 	LearningMEDiml "go_module/blueprints/learningMEDiml"
+	PocData "go_module/blueprints/pocData"
 	Utils "go_module/src"
 	"log"
 	"net/http"
@@ -18,8 +19,10 @@ func main() {
 	// Here is where you add the handle functions to the server
 	LearningMEDiml.AddHandleFunc()
 	ExtractionMEDiml.AddHandleFunc()
+	PocData.AddHandleFunc()
 	Utils.CreateHandleFunc("get_server_health", handleGetServerHealth)
 	Utils.CreateHandleFunc("removeId/", handleRemoveId)
+	Utils.CreateHandleFunc("stop/", handleStop)
 	Utils.CreateHandleFunc("clearAll", handleClearAll)
 
 	// We check if the conda environment was passed as an argument
@@ -82,6 +85,13 @@ func handleRemoveId(jsonConfig string, id string) (string, error) {
 	ok := Utils.KillScript(id)
 	Utils.RemoveIdFromScripts(id)
 	return "Removed successfully state : " + fmt.Sprint(ok), nil
+}
+
+// handleStop handles the request to stop the running script with the id (e.g. a learning experiment).
+// The id is kept: the request that started the script is then answered with {"cancelled": true}
+func handleStop(jsonConfig string, id string) (string, error) {
+	stopped := Utils.KillScript(id)
+	return "{\"stopped\": " + fmt.Sprint(stopped) + "}", nil
 }
 
 // handleClearAll handles the request to clear all the scripts

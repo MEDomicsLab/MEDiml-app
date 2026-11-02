@@ -1,8 +1,0 @@
-[submodule "pythonCode/submodules/MEDiml"]
-	path = pythonCode/submodules/MEDiml
-	url = git@github.com:MEDomicsLab/MEDiml.git
-	branch = dev_lab
-[submodule "pythonCode/submodules/MEDprofiles"]
-	path = pythonCode/submodules/MEDprofiles
-	url = git@github.com:MEDomics-UdeS/MEDprofiles.git
-	branch = fusion_MEDomicsLab

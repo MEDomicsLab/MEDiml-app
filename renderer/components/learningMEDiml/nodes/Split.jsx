@@ -2,11 +2,21 @@ import { Dropdown } from 'primereact/dropdown';
 import { InputNumber } from 'primereact/inputnumber';
 import { InputSwitch } from 'primereact/inputswitch';
 import { InputText } from 'primereact/inputtext';
-import { useContext, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Col, Form, Row } from "react-bootstrap";
 import Node, { updateHasWarning } from "../../flow/node";
-import { DataContext } from "../../workspace/dataContext";
+import Caption from '../../primitives/Caption';
+import { sectionCardClass } from '../../primitives/SectionCard';
+import { useMEDDataObjectsByType, useMEDDataStore } from "../../workspace/useMEDData";
 
+
+// The split types, the values are those of the active_method setting (see split_node.py)
+const SPLIT_TYPE_OPTIONS = [
+  { name: "Random", value: "Random" },
+  { name: "Institution", value: "Institution" },
+  { name: "Cross-Validation", value: "cv" }
+]
+const RANDOM_METHOD_OPTIONS = [{ name: "SubSampling", value: "SubSampling" }]
 
 /**
  * @param {string} id id of the node
@@ -20,12 +30,16 @@ import { DataContext } from "../../workspace/dataContext";
  */
 const Split = ({ id, data, type }) => {  
   const [selectedCSVFile, setSelectedCSVFile] = useState(data.internal.settings.path_outcome_file || "") // Selected CSV file
-  const [selectedSaveFolder, setSelectedSaveFolder] = useState("") // Selected save folder
+  const [selectedSaveFolder, setSelectedSaveFolder] = useState(data.internal.settings.path_save_experiments || "") // Selected save folder
   const [selectedWSFolder, setSelectedWSFolder] = useState(data.internal.settings.path_ws_experiments || "") // Selected workspace folder
   const [listCSVFiles, setListCSVFiles] = useState([]) // List of csv files in the workspace
   const [listWSFolders, setListWSFolders] = useState([]) // List of folders in the workspace
+  const [listsLoaded, setListsLoaded] = useState(false) // False until the workspace data is available
   const [reload, setReload] = useState(false)
-  const { globalData } = useContext(DataContext) // We get the global data from the context
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
+  // Re-run the folder/csv list updates only when the set of directories/csv files actually
+  // changes, instead of on every unrelated workspace change.
+  const relevantIds = useMEDDataObjectsByType(["directory", "csv"])
   const sectionStyle = {
     marginBottom: "16px",
     paddingBottom: "12px",
@@ -48,81 +62,100 @@ const Split = ({ id, data, type }) => {
       data.setupParam.possibleSettings.defaultSettings.path_save_experiments = data.internal.settings.path_save_experiments
       setSelectedSaveFolder(data.internal.settings.path_save_experiments)
     }
-    updateWSfolder()
-    updateCSVFilesList()
+    if (data.internal.settings.active_method?.[0]?.toLowerCase() !== "cv"){
+      console.log("debug 0")
+      data.setupParam.possibleSettings.defaultSettings.active_method = data.internal.settings.active_method
+    }
+    if (data.setupParam.possibleSettings.defaultSettings.active_method?.[0]?.toLowerCase() === "cv" &&
+      data.setupParam.possibleSettings.defaultSettings.cv.nFolds &&
+      data.setupParam.possibleSettings.defaultSettings.cv.nFolds !== data.internal.settings.cv.nFolds
+    ){
+      console.log("debug 1")
+      data.setupParam.possibleSettings.defaultSettings.cv.nFolds = data.internal.settings.cv.nFolds
+    } else if (data.setupParam.possibleSettings.defaultSettings.active_method?.[0]?.toLowerCase() === "random" &&
+      data.setupParam.possibleSettings.defaultSettings.Random.nSplits &&
+      data.setupParam.possibleSettings.defaultSettings.Random.nSplits !== data.internal.settings.Random.nSplits
+    ){
+      console.log("debug 2")
+      data.setupParam.possibleSettings.defaultSettings.Random.nSplits = data.internal.settings.Random.nSplits
+    }
+    updateLists()
     setReload(!reload)
   }, [])
-  
+
   useEffect(() => {
-    updateWSfolder()
-    updateCSVFilesList()
-  }, [globalData])
+    updateLists()
+  }, [relevantIds])
 
-  const updateWSfolder = () => {
-    if (globalData !== undefined) {
-      let keys = Object.keys(globalData)
-      let wsFolders = []
-      keys.forEach((key) => {
-        if (globalData[key].type === "directory" && !globalData[key]?.path?.includes(".medomics") && !globalData[key]?.path?.includes(".mediml")) {
-          wsFolders.push({ name: globalData[key].name, value: globalData[key].path })
-        }
-      })
-      setListWSFolders(wsFolders)
-    }
-  }
-
-  const updateCSVFilesList = () => {
-    if (globalData !== undefined) {
-      let keys = Object.keys(globalData)
-      let csvFiles = []
-      keys.forEach((key) => {
-        if (globalData[key].type === "csv") {
-          csvFiles.push({ name: globalData[key].name, value: globalData[key].path })
-        }
-      })
-      setListCSVFiles(csvFiles)
-    }
-  }
-
-  const handleCSVFileChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-      data.setupParam.possibleSettings.defaultSettings.path_outcome_file = fileList
-    }
-    else {
-      data.setupParam.possibleSettings.defaultSettings.path_outcome_file = event.target.files.path
-    }
-    // Update node warnings
-    updateHasWarning(data)
-    setReload(!reload)
-  }
-
-  const handleSaveFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
+  /**
+   * @description Updates the lists of folders and csv files of the workspace, then the warnings of the node
+   */
+  const updateLists = () => {
+    const globalData = medDataStore.snapshot()
+    if (globalData === undefined) return
+    let wsFolders = []
+    let csvFiles = []
+    Object.values(globalData).forEach((object) => {
+      if (object.type === "directory" && !object?.path?.includes(".medomics") && !object?.path?.includes(".mediml")) {
+        wsFolders.push({ name: object.name, value: object.path })
+      } else if (object.type === "csv") {
+        csvFiles.push({ name: object.name, value: object.path })
       }
-      data.setupParam.possibleSettings.defaultSettings.path_save_experiments = fileList
-      data.internal.settings.path_save_experiments = fileList
-    }
-    else {
-      data.setupParam.possibleSettings.defaultSettings.path_save_experiments = event.target.files.path
-      data.internal.settings.path_save_experiments = event.target.files.path
-    }
-    // Update node warnings
-    updateHasWarning(data)
-    setReload(!reload)
+    })
+    // The paths can only be checked once the workspace data is available
+    const loaded = Object.keys(globalData).length > 0
+    setListWSFolders(wsFolders)
+    setListCSVFiles(csvFiles)
+    setListsLoaded(loaded)
+    updateWarnings(wsFolders, csvFiles, loaded)
   }
+
+  /**
+   * @param {String} path path saved in the settings
+   * @param {Array} options options of its dropdown
+   * @param {Boolean} loaded whether the workspace data is available
+   * @returns {Boolean} True if the path is set but is not in the workspace (e.g. it was moved, renamed or deleted, or
+   * the scene comes from another computer). Its dropdown can't display it, so it looks empty.
+   */
+  const isMissingFromWorkspace = (path, options = [], loaded = listsLoaded) => loaded && !!path && !options.some((option) => option.value === path)
+
+  /**
+   * @description Updates the warning of the node: the mandatory fields (see updateHasWarning), then the saved paths
+   * that are not in the workspace, which would otherwise look empty without any warning
+   */
+  const updateWarnings = (wsFolders = listWSFolders, csvFiles = listCSVFiles, loaded = listsLoaded) => {
+    updateHasWarning(data)
+    if (data.internal.hasWarning?.state) return
+    const settings = data.internal.settings
+    let message = null
+    if (isMissingFromWorkspace(settings.path_ws_experiments, wsFolders, loaded)) {
+      message = "The experiment's workspace folder was not found in the workspace, please select it again!"
+    } else if (isMissingFromWorkspace(settings.path_outcome_file, csvFiles, loaded)) {
+      message = "The outcomes CSV file was not found in the workspace, please select it again!"
+    } else if (isMissingFromWorkspace(settings.path_save_experiments, wsFolders, loaded)) {
+      message = "The save folder was not found in the workspace, please select it again!"
+    }
+    if (message) {
+      data.internal.hasWarning = { state: true, tooltip: <p>{message}</p> }
+    }
+  }
+
+  /**
+   * @param {String} path path saved in the settings
+   * @param {Array} options options of its dropdown
+   * @returns {JSX.Element|null} A note under the dropdown when the saved path is not in the workspace
+   */
+  const missingPathNote = (path, options) =>
+    isMissingFromWorkspace(path, options) ? (
+      <Caption below warn>
+        Warning: not found in the workspace: {path}
+      </Caption>
+    ) : null
+
+  // Matched without case, as the scenes saved by older versions may store "random" or "CV"
+  const splitTypeValue = SPLIT_TYPE_OPTIONS.find(
+    (option) => option.value.toLowerCase() === data.setupParam.possibleSettings.defaultSettings.active_method?.[0]?.toLowerCase()
+  )?.value
 
   return (
     <>
@@ -136,13 +169,13 @@ const Split = ({ id, data, type }) => {
         nodeSpecific={
           <>
             <Row 
-              className="form-group-box" 
+              className={sectionCardClass} 
               style={{ maxHeight: "400px", textAlign: "center", alignItems: "center", justifyContent: "center", overflowY: "auto", overflowX: "hidden" }}
             >
               {/* Outcome Name */}
               <Form.Group controlId="outcomeName" style={sectionStyle}>
                 <Form.Label className="outcomeName">Outcome Name</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>A reference name to describe the problem studied.</p>
+                <Caption>A reference name to describe the problem studied.</Caption>
                 <InputText
                   style={{ maxWidth: "100%", height: "auto", width: "auto", display: "block", margin: "0 auto" }}
                   value={data.setupParam.possibleSettings.defaultSettings.outcome_name}
@@ -151,7 +184,7 @@ const Split = ({ id, data, type }) => {
                     data.setupParam.possibleSettings.defaultSettings.outcome_name = event.target.value
                     data.internal.settings.outcome_name = event.target.value
                     // Update node warnings
-                    updateHasWarning(data)
+                    updateWarnings()
                     setReload(!reload)
                   }}
                 />
@@ -160,25 +193,71 @@ const Split = ({ id, data, type }) => {
               {/* Split Method */}
               <Form.Group controlId="splitMethod" style={sectionStyle}>
               <Form.Label className="splitMethod">Create Holdout Set</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>If activated a holdout set will be created. If not, all the data will be used for learning.</p>
+              <Caption>If activated a holdout set will be created. If not, all the data will be used for learning.</Caption>
                 <InputSwitch 
                     checked={data.setupParam.possibleSettings.defaultSettings.method == 'random' ? true : false} 
                     onChange={(event) => {
                       data.setupParam.possibleSettings.defaultSettings.method = event.value ? 'random' : 'all_learn'
                       data.internal.settings.method = event.value ? 'random' : 'all_learn'
                       // Update node warnings
-                      updateHasWarning(data)
+                      updateWarnings()
                       setReload(!reload)
                     }}
                 />
               </Form.Group>
 
+              {/* Holdout set parameters (defaults of MEDiml's create_holdout_set) */}
+              {data.internal.settings.method == 'random' && (
+                <>
+                  <Form.Group controlId="holdoutPercentage" style={sectionStyle}>
+                    <Form.Label className="holdoutPercentage">Holdout Proportion</Form.Label>
+                    <Caption>Proportion of the patients kept aside in the holdout set.</Caption>
+                    <InputNumber
+                        style={{width: "300px"}}
+                        buttonLayout="horizontal"
+                        value={data.internal.settings.holdoutPercentage ?? 0.2}
+                        onValueChange={(event) => {
+                          data.setupParam.possibleSettings.defaultSettings.holdoutPercentage = event.target.value
+                          data.internal.settings.holdoutPercentage = event.target.value
+                          updateWarnings()
+                          setReload(!reload)
+                        }}
+                        mode="decimal"
+                        showButtons
+                        min={0.01}
+                        max={0.99}
+                        step={0.01}
+                        incrementButtonClassName="p-button-info"
+                        decrementButtonClassName='p-button-info'
+                    />
+                  </Form.Group>
+
+                  <Form.Group controlId="holdoutSeed" style={sectionStyle}>
+                    <Form.Label className="holdoutSeed">Holdout Random Seed</Form.Label>
+                    <Caption>Ensures a reproducible holdout set.</Caption>
+                    <InputNumber
+                        style={{width: "300px", display: "block", margin: "0 auto"}}
+                        buttonLayout="horizontal"
+                        value={data.internal.settings.holdoutSeed ?? 1}
+                        onValueChange={(event) => {
+                          data.setupParam.possibleSettings.defaultSettings.holdoutSeed = event.target.value
+                          data.internal.settings.holdoutSeed = event.target.value
+                          updateWarnings()
+                          setReload(!reload)
+                        }}
+                        mode="decimal"
+                        min={0}
+                    />
+                  </Form.Group>
+                </>
+              )}
+
               {/* Workspace Folder */}
               <Form.Group controlId="workspaceFolder" style={sectionStyle}>
                 <Form.Label className="workspaceFolder">Experiment's Workspace Folder</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
+                <Caption>
                   Folder containing the experiments' resources (features, outcome file, etc.).
-                </p>
+                </Caption>
                 <Col style={{ width: "300px", margin: "0 auto", display: "block", textAlign: "center" }}>
                   <Dropdown
                     style={{ maxWidth: "100%", height: "auto", width: "auto" }}
@@ -189,7 +268,7 @@ const Split = ({ id, data, type }) => {
                       data.internal.settings.path_ws_experiments = e.value
                       setSelectedWSFolder(e.value)
                       // Update node warnings
-                      updateHasWarning(data)
+                      updateWarnings()
                       setReload(!reload)
                     }}
                     options={listWSFolders}
@@ -197,13 +276,14 @@ const Split = ({ id, data, type }) => {
                     display="chip"
                     placeholder="Select a folder"
                   />
+                  {missingPathNote(selectedWSFolder, listWSFolders)}
                 </Col>
               </Form.Group>
 
               {/* Path Outcome */}
               <Form.Group controlId="outcomeFile" style={sectionStyle}>
               <Form.Label className="outcomeFile">Outcomes CSV</Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>CSV file of the outcomes.</p>
+              <Caption>CSV file of the outcomes.</Caption>
               <Col style={{ width: "300px", margin: "0 auto", display: "block", textAlign: "center" }}>
                 <Dropdown
                   style={{ maxWidth: "100%", height: "auto", width: "auto" }}
@@ -214,7 +294,7 @@ const Split = ({ id, data, type }) => {
                     data.internal.settings.path_outcome_file = e.value
                     setSelectedCSVFile(e.value)
                     // Update node warnings
-                    updateHasWarning(data)
+                    updateWarnings()
                     setReload(!reload)
                   }}
                   options={listCSVFiles}
@@ -222,15 +302,16 @@ const Split = ({ id, data, type }) => {
                   display="chip"
                   placeholder="Select a CSV file"
                 />
+                {missingPathNote(selectedCSVFile, listCSVFiles)}
               </Col>
               </Form.Group>
 
               {/* Save Folder */}
               <Form.Group controlId="experimentSaveFolder" style={lastSectionStyle}>
                 <Form.Label className="experimentSaveFolder">Save Folder</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
+                <Caption>
                   Folder where the results will be saved. The folder should not be empty.
-                </p>
+                </Caption>
                 <Col style={{ width: "300px", margin: "0 auto", display: "block", textAlign: "center" }}>
                   <Dropdown
                     style={{ maxWidth: "100%", height: "auto", width: "auto" }}
@@ -241,7 +322,7 @@ const Split = ({ id, data, type }) => {
                       data.internal.settings.path_save_experiments = e.value
                       setSelectedSaveFolder(e.value)
                       // Update node warnings
-                      updateHasWarning(data)
+                      updateWarnings()
                       setReload(!reload)
                     }}
                     options={listWSFolders}
@@ -249,6 +330,7 @@ const Split = ({ id, data, type }) => {
                     display="chip"
                     placeholder="Select a folder"
                   />
+                  {missingPathNote(selectedSaveFolder, listWSFolders)}
                 </Col>
               </Form.Group>
 
@@ -258,22 +340,18 @@ const Split = ({ id, data, type }) => {
                   className="splitType">
                       Split Type
               </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Choose method for splitting data into sets.</p>
+              <Caption>Choose method for splitting data into sets.</Caption>
               <Dropdown 
                   style={{width: "300px"}}
-                  value={data.setupParam.possibleSettings.defaultSettings.active_method[0]}
-                  options={[{ name: 'Random' }, { name: 'Institution' }, { name: 'Cross-Validation' }]}
+                  value={splitTypeValue}
+                  options={SPLIT_TYPE_OPTIONS}
                   optionLabel="name" 
-                  placeholder={data.setupParam.possibleSettings.defaultSettings.active_method[0]}
+                  optionValue="value"
+                  placeholder="Select a split type"
                   onChange={(event) => {
-                    if (event.target.value.name === "Cross-Validation") {
-                      data.setupParam.possibleSettings.defaultSettings.active_method = ['cv'];
-                      data.internal.settings.active_method = ['cv'];
-                    } else {
-                      data.setupParam.possibleSettings.defaultSettings.active_method = [event.target.value.name];
-                      data.internal.settings.active_method = [event.target.value.name];
-                    }
-                    updateHasWarning(data);
+                    data.setupParam.possibleSettings.defaultSettings.active_method = [event.value];
+                    data.internal.settings.active_method = [event.value];
+                    updateWarnings();
                     setReload(!reload);
                   }} 
               />
@@ -288,17 +366,18 @@ const Split = ({ id, data, type }) => {
                   className="splitMethod">
                       Split Method
               </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Algorithm for distributing samples into train/test sets.</p>
+              <Caption>Algorithm for distributing samples into train/test sets.</Caption>
                 <Dropdown 
-                    style={{width: "300px", display: "block", margin: "0 auto"}}
+                    style={{width: "300px", margin: "0 auto"}}
                     value={data.setupParam.possibleSettings.defaultSettings.Random.method}
-                    options={[{ name: 'SubSampling' }]}
+                    options={RANDOM_METHOD_OPTIONS}
                     optionLabel="name" 
-                    placeholder={data.setupParam.possibleSettings.defaultSettings.Random.method}
+                    optionValue="value"
+                    placeholder="Select a split method"
                     onChange={(event) => {
-                      data.setupParam.possibleSettings.defaultSettings.Random.method = event.target.value.name;
-                      data.internal.settings.Random.method = event.target.value.name;
-                      updateHasWarning(data);
+                      data.setupParam.possibleSettings.defaultSettings.Random.method = event.value;
+                      data.internal.settings.Random.method = event.value;
+                      updateWarnings();
                       setReload(!reload);
                     }} 
                         />
@@ -310,15 +389,15 @@ const Split = ({ id, data, type }) => {
                   className="nSplits">
                       Splits Number
               </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Total number of data partitions to create.</p>
+              <Caption>Total number of data partitions to create.</Caption>
                 <InputNumber
-                    style={{width: "300px", display: "block", margin: "0 auto"}}
+                    style={{width: "300px", margin: "0 auto"}}
                     buttonLayout="horizontal"
                     value={data.setupParam.possibleSettings.defaultSettings.Random.nSplits}
                     onValueChange={(event) => {
                       data.setupParam.possibleSettings.defaultSettings.Random.nSplits = event.target.value;
                       data.internal.settings.Random.nSplits = event.target.value;
-                      updateHasWarning(data);
+                      updateWarnings();
                       setReload(!reload);
                     }}
                     mode="decimal"
@@ -336,14 +415,14 @@ const Split = ({ id, data, type }) => {
                   className="stratifyInstitutions">
                       Flag by Institution
               </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Maintain institution representation in train/test.</p>
+              <Caption>Maintain institution representation in train/test.</Caption>
               <br></br>
                 <InputSwitch 
                     checked={data.setupParam.possibleSettings.defaultSettings.Random.stratifyInstitutions} 
                     onChange={(event) => {
                         data.setupParam.possibleSettings.defaultSettings.Random.stratifyInstitutions = event.target.value;
                         data.internal.settings.Random.stratifyInstitutions = event.target.value;
-                        updateHasWarning(data);
+                        updateWarnings();
                         setReload(!reload);
                     }}
                 />
@@ -355,15 +434,15 @@ const Split = ({ id, data, type }) => {
                   className="testProportion">
                       Train/Test Proportion
               </Form.Label>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Percentage of data allocated for testing.</p>
+              <Caption>Percentage of data allocated for testing.</Caption>
                 <InputNumber
-                    style={{width: "300px", display: "block", margin: "0 auto"}}
+                    style={{width: "300px", margin: "0 auto"}}
                     buttonLayout="horizontal"
                     value={data.setupParam.possibleSettings.defaultSettings.Random.testProportion}
                     onValueChange={(event) => {
                         data.setupParam.possibleSettings.defaultSettings.Random.testProportion = event.target.value;
                         data.internal.settings.Random.testProportion = event.target.value;
-                        updateHasWarning(data);
+                        updateWarnings();
                         setReload(!reload);
                     } }
                     mode="decimal"
@@ -380,7 +459,7 @@ const Split = ({ id, data, type }) => {
               {/* Seed */}
               <Form.Group controlId="seed" style={lastSectionStyle}>
                 <Form.Label className="seed">Random Seed</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Ensures reproducible random data splitting.</p>
+                <Caption>Ensures reproducible random data splitting.</Caption>
                 <InputNumber
                     style={{width: "300px", display: "block", margin: "0 auto"}}
                     buttonLayout="horizontal"
@@ -388,7 +467,7 @@ const Split = ({ id, data, type }) => {
                     onValueChange={(event) => {
                         data.setupParam.possibleSettings.defaultSettings.Random.seed = event.target.value;
                         data.internal.settings.Random.seed = event.target.value;
-                        updateHasWarning(data);
+                        updateWarnings();
                         setReload(!reload);
                     } }
                     mode="decimal"
@@ -405,7 +484,7 @@ const Split = ({ id, data, type }) => {
               {/* Number of splits */}
               <Form.Group controlId="nSplits" style={sectionStyle}>
                 <Form.Label className="nSplits">Number of folds</Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>K value for cross-validation folds (K).</p>
+                <Caption>K value for cross-validation folds (K).</Caption>
                 <InputNumber
                     style={{width: "300px"}}
                     buttonLayout="horizontal"
@@ -413,7 +492,7 @@ const Split = ({ id, data, type }) => {
                     onValueChange={(event) => {
                       data.setupParam.possibleSettings.defaultSettings.cv.nFolds = event.target.value;
                       data.internal.settings.cv.nFolds = event.target.value;
-                      updateHasWarning(data);
+                      updateWarnings();
                       setReload(!reload);
                     }}
                     mode="decimal"
@@ -428,7 +507,7 @@ const Split = ({ id, data, type }) => {
               <Form.Group controlId="seed" style={lastSectionStyle}>
                 <Form.Label className="seed">Random Seed
                 </Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>Ensures reproducible random data splitting.</p>
+                <Caption>Ensures reproducible random data splitting.</Caption>
                 <InputNumber
                     style={{width: "300px", display: "block", margin: "0 auto"}}
                     buttonLayout="horizontal"
@@ -436,7 +515,7 @@ const Split = ({ id, data, type }) => {
                     onValueChange={(event) => {
                         data.setupParam.possibleSettings.defaultSettings.cv.seed = event.target.value;
                         data.internal.settings.cv.seed = event.target.value;
-                        updateHasWarning(data);
+                        updateWarnings();
                         setReload(!reload);
                     } }
                     mode="decimal"

@@ -1,5 +1,6 @@
-mediml
+mediml>=0.20.0
 jupytext
 ipykernel
 pymongo==4.7.3
 pydantic<2
+requests

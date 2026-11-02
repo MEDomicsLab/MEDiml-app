@@ -199,7 +199,7 @@ def load_med_standard_data(dataset_list, tags_list, vars_list, target) -> pandas
 
 def allowed_pickle_object(filepath):
     path = Path(filepath)
-    return path.suffix.lower() in {'.pkl', '.pickle', '.joblib', '.medmodel'}
+    return path.suffix.lower() in {'.pkl', '.pickle', '.joblib', '.medmodel', '.npy'}
 
 
 def format_features(features_dict):

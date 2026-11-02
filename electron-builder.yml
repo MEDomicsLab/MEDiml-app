@@ -1,6 +1,6 @@
-appId: com.medomicslab.medapp
-productName: MEDapp
-copyright: Copyright © 2023 MEDomicsLab Team
+appId: com.medomicslab.mediml
+productName: MEDiml
+copyright: Copyright © 2026 MEDomicsLab Team
 directories:
   output: dist
   buildResources: resources
@@ -9,4 +9,30 @@ files:
     filter:
       - package.json
       - app
-publish: null
+extraResources: # extra resources to be copied into the app bundle
+  - from: ./go_executables # Source directory
+    to: go_executables # Destination directory inside Contents/Resources
+    filter:
+      - server_go
+      - server_go_win32.exe
+  - from: ./pythonCode # Source directory
+    to: pythonCode # Destination directory inside Contents/Resources
+    # Exclude pycache and other unnecessary files
+    filter:
+      - "**/*"
+      - "!**/__pycache__/**"
+      - "!**/*.pyc"
+      - "!**/*.pyo"
+      - "!**/.git"
+      - "!**/.git/**"
+  - from: ./pythonEnv # Source directory
+    to: pythonEnv # Destination directory inside Contents/Resources
+    filter:
+      - "**/*"
+      - "!**/.git"
+      - "!**/.git/**"
+publish:
+  provider: github
+  owner: "MEDomicsLab"
+  repo: "MEDiml-app"
+  releaseType: "draft"

@@ -46,7 +46,7 @@ import { FlowResultsContext } from "./context/flowResultsContext"
  * This component is used to display a workflow.
  * It manages base workflow functions such as node creation, node deletion, node connection, etc.
  */
-const WorkflowBase = ({ isGoodConnection, groupNodeHandlingDefault, onDeleteNode, onNodeDrag, mandatoryProps, ui, uiTopLeft, uiTopRight, uiTopCenter, customOnConnect }) => {
+const WorkflowBase = ({ isGoodConnection, groupNodeHandlingDefault, onDeleteNode, onNodeDrag, mandatoryProps, ui, uiTopLeft, uiTopRight, uiTopCenter, customOnConnect, workflowType }) => {
   const { reactFlowInstance, setReactFlowInstance, addSpecificToNode, duplicateNode, nodeTypes, nodes, setNodes, onNodesChange, edges, setEdges, onEdgesChange, runNode } = mandatoryProps
 
   const edgeUpdateSuccessful = useRef(true)
@@ -288,7 +288,8 @@ const WorkflowBase = ({ isGoodConnection, groupNodeHandlingDefault, onDeleteNode
         node.data = {
           ...node.data
         }
-        node.draggable = !showResultsPane
+        // boxes are guides of the learning scene, they are never draggable
+        node.draggable = !showResultsPane && node.type !== "boxNode"
         return node
       })
     )
@@ -625,17 +626,18 @@ const WorkflowBase = ({ isGoodConnection, groupNodeHandlingDefault, onDeleteNode
                 onChange={(e) => setShowAvailableNodes(!e.value)}
                 className="btn-ctl-available-nodes"
               />
-              <ToggleButton
-                onLabel="Results mode on"
-                offLabel="See results"
-                onIcon="pi pi-chart-bar"
-                offIcon="pi pi-eye"
-                disabled={!isResults}
+              {workflowType !== "extraction" && (
+                <ToggleButton
+                  onLabel="Results mode on"
+                  offLabel="See results"
+                  onIcon="pi pi-chart-bar"
+                  offIcon="pi pi-eye"
+                  disabled={!isResults}
                 checked={showResultsPane}
                 onChange={(e) => setShowResultsPane(e.value)}
                 severity="success"
                 className="btn-show-results"
-              />
+              />)}
               {uiTopLeft}
             </Col>
             <Col md="auto" className="center">
@@ -647,7 +649,7 @@ const WorkflowBase = ({ isGoodConnection, groupNodeHandlingDefault, onDeleteNode
           </Row>
         </div>
 
-        <div className="flow-btn-panel-left-vertical">
+        <div className="flow-btn-panel-error">
           {hasBeenAnError && (
             <Button
               icon="pi pi-exclamation-circle"

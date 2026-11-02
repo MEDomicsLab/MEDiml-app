@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import MEDiml
+import numpy as np
 
 from ..context import LearningContext
 from ..node import LearningNode
@@ -25,7 +26,7 @@ class SplitNode(LearningNode):
         if active_method == "cv":
             context.nb_split = self.params.get("cv", {}).get("nFolds", 5)
         elif active_method == "random":
-            context.nb_split = self.params.get("random", {}).get("nSplits", 10)
+            context.nb_split = (self.params.get("Random") or self.params.get("random") or {}).get("nSplits", 10)
         else:
             context.nb_split = 5
         context.designed_experiment = False
@@ -36,13 +37,24 @@ class SplitNode(LearningNode):
         context.method = self.params["method"]
         context.holdout_test = context.method != "all_learn"
 
+        # The final model is trained on the study created by a previous run
+        if context.finalize_model:
+            if context.path_study is None or not Path(context.path_study).exists():
+                raise FileNotFoundError(f"Study folder {context.path_study} was not found. Run the experiment again before finalizing the model.")
+            return
 
         if not self.splitted_data:
-            path_study = MEDiml.learning.ml_utils.create_holdout_set(
+            # MEDiml's get_stratified_splits doesn't seed the random generator here: seed it so the
+            # holdout set is reproducible
+            np.random.seed(self.params.get("holdoutSeed", 1))
+            path_study =MEDiml.learning.ml_utils.create_holdout_set(
                 path_outcome_file=context.path_outcome_file,
                 path_save_experiments=context.path_save_experiments,
                 outcome_name=context.outcome_name,
                 method=context.method,
+                # Defaults of MEDiml's create_holdout_set
+                percentage=self.params.get("holdoutPercentage", 0.2),
+                seed=self.params.get("holdoutSeed", 1),
             )
             context.path_study = Path(path_study) if not isinstance(path_study, Path) else path_study
             self.path_study = context.path_study
@@ -53,6 +65,10 @@ class SplitNode(LearningNode):
             context.path_study = self.path_study
 
     def _resolve_settings_path(self) -> Path:
+        app_folder = Path(__file__).resolve().parents[4]
+        path_settings = app_folder / "baseFiles" / "ml_settings.yml"
+        if path_settings.exists():
+            return path_settings
         return Path.cwd() / "baseFiles" / "ml_settings.yml"
 
     def generate_code(self, file_obj, settings: dict[str, Any]) -> None:
@@ -70,7 +86,7 @@ class SplitNode(LearningNode):
                 "if active_method == 'cv':",
                 "    nb_split = split_settings.get('cv', {}).get('nFolds', 5)",
                 "elif active_method == 'random':",
-                "    nb_split = split_settings.get('random', {}).get('nSplits', 10)",
+                "    nb_split = (split_settings.get('Random') or split_settings.get('random') or {}).get('nSplits', 10)",
                 "else:",
                 "    nb_split = 5",
                 "designed_experiment = False",

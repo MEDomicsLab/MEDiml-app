@@ -1,0 +1,168 @@
+/* SectionCard -- replaces `.form-group-box`.
+   See SectionCard.jsx for what each declaration is fixing. */
+
+.card {
+  background-color: var(--med-surface-card);
+  border-radius: var(--med-radius-lg);
+  margin-block: var(--med-card-gap);
+
+  /* Explicitly zero, not merely unset.
+     During the migration this class is applied to elements that are also
+     Bootstrap `.row`s, and `.row` sets `margin-left/right: calc(-.5 * 1.5rem)`
+     = -12px so its columns' gutters line up with the grid. A card carrying
+     those negative margins overhangs its container by 12px on each side, which
+     is plainly visible once the card has a border. `.form-group-box` happened
+     to mask this by setting `margin-left/right: 2px`; this states it. */
+  margin-inline: 0;
+
+  /* Was `padding: 2px` horizontally (with 10px top/bottom bolted on after).
+     Controls sat two pixels from the card edge. This single value is most of
+     the "no breathing room" complaint. Scales with --med-density so Compact
+     tightens the card without touching type size or hit targets. */
+  padding: var(--med-card-padding);
+
+  /* `.form-group-box` set `text-align: center` and `font-weight: bold` on the
+     CONTAINER, so every label, paragraph and caption inside inherited both.
+     Centred body text has a ragged left edge, which slows vertical scanning of
+     a parameter list; and when everything is bold, nothing is emphasised. Both
+     are reset here, and the weight is reapplied deliberately on .title only. */
+  text-align: start;
+  font-weight: 400;
+
+  /* Flat by default. Every one of the 12 rows on the DataManager page carried
+     the same `box-shadow: 0 2px 5px rgb(0 0 0 / 20%)`, so elevation signalled
+     nothing and the page read as a stack of equally-important cards. A hairline
+     border separates without competing; use `raised` for the one card that is
+     genuinely primary. */
+  border: 1px solid var(--med-border-subtle);
+  box-shadow: var(--med-elev-0);
+}
+
+.raised {
+  box-shadow: var(--med-elev-1);
+}
+
+/* Warning variant. Keeps the status colour on the border rather than flooding
+   the surface, so body text contrast is unaffected. */
+.warning {
+  border-color: var(--med-status-warn);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--med-space-2);
+  margin-bottom: var(--med-card-gap);
+}
+
+.title {
+  font-size: var(--med-text-lg);
+  font-weight: 600;
+  line-height: var(--med-leading-tight);
+  color: var(--med-text-primary);
+  margin: 0;
+}
+
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--med-text-secondary);
+}
+
+/* Pushes trailing header content (a count, a toggle) to the far edge. */
+.headerEnd {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--med-space-2);
+}
+
+.body {
+  min-width: 0;
+}
+
+/* Compact variant for dense, secondary rows. Density is a feature in a
+   research tool: the fix for clutter is hierarchy, not fewer parameters. */
+.compact {
+  padding: calc(var(--med-space-3) * var(--med-density));
+}
+
+/* ===========================================================================
+   ROW LAYOUT -- title (and its info pill) on the left, controls on the right.
+
+   THE ALIGNMENT INVARIANT: controls line up across every card on a page only
+   because every card shares --med-card-padding and a 1px border, so the fixed
+   title column starts at the same x in each one. A card with custom padding
+   silently breaks the alignment for the whole page.
+
+   Field's `inline` mode cannot do this: its label block is `flex: 1 1 18rem`,
+   so the control starts wherever the label happens to end.
+
+   Everything below is additive. `.card` is untouched, because 30 call sites
+   outside these two pages (settingsEditor.jsx and the learning nodes) use it in
+   its stacked form.
+   =========================================================================== */
+.cardRow {
+  display: flex;
+
+  /* Stated explicitly rather than relying on the initial value. Bootstrap's own
+     `.card` sets `flex-direction: column`, and anything that lands that class on
+     the same element silently turns this row into a stack -- the title and the
+     control keep their declared flex-basis but apply it to the wrong axis, so
+     both collapse to their content width and nothing looks obviously broken. */
+  flex-direction: row;
+
+  align-items: flex-start;
+  gap: var(--med-space-4);
+
+  /* The narrow-panel behaviour, with no breakpoint: once the panel is narrower
+     than title + gap + body basis, the body wraps under the title. */
+  flex-wrap: wrap;
+}
+
+/* `center` only for a card whose body is ONE short control with no sub-label --
+   in practice the switch cards. Anywhere else the title floats mid-card,
+   detached from the thing it names. */
+.alignCenter {
+  align-items: center;
+}
+
+.rowTitle {
+  /* flex-shrink 0 is what fixes the column width; max-width stops it
+     overflowing a panel narrower than the column itself. */
+  flex: 0 0 var(--med-card-title-col);
+  max-width: 100%;
+  min-width: 0;
+
+  display: flex;
+  align-items: center;
+  gap: var(--med-space-2);
+  flex-wrap: wrap;
+}
+
+.rowBody {
+  flex: 1 1 var(--med-paramgrid-min);
+  min-width: 0;
+}
+
+/* The expanded hint takes its own line under the WHOLE card. Inside the 16rem
+   title column a 300-character description would be a ten-line ribbon and
+   --med-measure (68ch) could not be honoured at all. Being last in the DOM it
+   wraps by itself, so opening a hint never shifts a control sideways or down. */
+.rowHint {
+  flex: 1 0 100%;
+  min-width: 0;
+  margin-block-start: var(--med-card-gap);
+}
+
+/* No surface. For a row inside <Disclosure>, whose .body padding uses the same
+   --med-card-padding token, so the title column still lines up with the cards
+   outside it -- to within .card's 1px border, which is invisible. Do not
+   "correct" that 1px by adding a margin; it would desynchronise the two. */
+.bare {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin-block: 0;
+}

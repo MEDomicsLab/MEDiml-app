@@ -26,37 +26,18 @@
   position: absolute;
   width: var(--bs-accordion-btn-icon-width);
   height: var(--bs-accordion-btn-icon-width);
-  margin-left: none;
   content: " ";
   background-image: var(--bs-accordion-btn-icon);
   background-repeat: no-repeat;
   background-size: var(--bs-accordion-btn-icon-width);
   transition: var(--bs-accordion-btn-icon-transition);
 }
-.accordion-button::after {
-  content: "";
-  background-image: none;
-  background-repeat: no-repeat;
-  background-size: var(--bs-accordion-btn-icon-width);
-  transition: var(--bs-accordion-btn-icon-transition);
-}
-
 .accordion-button:not(.collapsed) {
   --bs-accordion-btn-bg: #353535;
   color: #dfdfdf;
   background-color: #353535;
 }
 
-.accordion-button {
-  margin-left: 0 2rem;
-  border-radius: 0px;
-  background-color: #353535;
-  padding: 0.1rem;
-  padding-left: 0.1rem;
-  color: #dfdfdf;
-  font-size: 0.85rem;
-  box-shadow: 0 6px 2px -2px #20202077 !important;
-}
 .accordion-button:focus {
   z-index: 2;
   border-color: #353535;
@@ -67,14 +48,11 @@
   transform: var(--bs-accordion-btn-icon-transform);
 }
 
-.accordion-button > div > p {
-  margin: 0;
-  padding: 0;
-  font-size: 0.85rem;
-  margin-left: 1rem;
-  color: #dfdfdf;
-}
 .accordion-button::after {
+  background-image: none;
+  background-repeat: no-repeat;
+  background-size: var(--bs-accordion-btn-icon-width);
+  transition: var(--bs-accordion-btn-icon-transition);
   content: none;
 }
 .accordion-body {
@@ -85,8 +63,6 @@
   display: inline;
   border: none;
   width: min-content;
-  margin: none;
-  padding: none !important;
   position: relative;
   right: 10px;
   z-index: 10;
@@ -151,8 +127,6 @@
 }
 
 .sidebar-file-main-button:hover {
-  /* Change the border color and width */
-  border: 0 0 0 0.1rem solid #9dd3f7;
   box-shadow: 0 0 0 0.1rem rgba(68, 143, 255, 0.5);
 }
 
@@ -222,11 +196,22 @@
 }
 
 .accordion-button {
+  border-radius: 0px;
+  padding: 0.1rem;
+  padding-left: 0.1rem;
+  color: #dfdfdf;
+  font-size: 0.85rem;
   display: inline-block !important;
   background-color: #222222;
   box-shadow: 0 0 0 0.1rem rgba(39, 39, 39, 0.544);
 }
+
 .accordion-button > div > p {
+  margin: 0;
+  padding: 0;
+  font-size: 0.85rem;
+  margin-left: 1rem;
+  color: #dfdfdf;
   padding-left: 1rem;
 }
 
@@ -276,9 +261,15 @@
   margin: 0;
 }
 
-:focus-visible {
-  outline: none;
-}
+/* A bare `:focus-visible { outline: none }` used to sit here. Despite living in
+   a sidebar stylesheet it was unscoped, so it removed the keyboard focus ring
+   from every control in the application -- and because this file is imported
+   after globals.css, it silently beat the ring defined there.
+
+   Removed rather than scoped to the sidebar: suppressing the indicator for
+   keyboard users is the same WCAG 2.4.7 failure whether it applies to one
+   component or all of them. If a control here needs a different ring, restyle
+   the outline instead of removing it. */
 
 .tooltip {
   position: absolute !important;

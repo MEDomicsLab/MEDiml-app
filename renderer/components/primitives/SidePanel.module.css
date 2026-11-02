@@ -1,0 +1,99 @@
+/* SidePanel -- the right-docked frame shared by documentation and editors.
+   See SidePanel.jsx. */
+
+.panel {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-end: 0;
+  /* Above the app chrome, below PrimeReact's modal layer (1100+) so a dialog
+     opened while the panel is open still covers it. */
+  z-index: 1050;
+  display: flex;
+  flex-direction: column;
+  width: min(34rem, 100vw);
+  background-color: var(--med-surface-card);
+  color: var(--med-text-primary);
+  border-inline-start: 1px solid var(--med-border-subtle);
+  box-shadow: var(--med-elev-3);
+  animation: slideIn var(--med-duration-base) ease-out;
+}
+
+/* Forms: a label with its description and a control share one line. */
+.wide {
+  width: min(46rem, 100vw);
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--med-space-3);
+  padding: var(--med-space-3) var(--med-space-4);
+  border-block-end: 1px solid var(--med-border-subtle);
+  flex-shrink: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--med-text-xl);
+  font-weight: 600;
+  line-height: var(--med-leading-tight);
+}
+
+.close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--med-radius-pill);
+  background: none;
+  color: var(--med-text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.close:hover {
+  border-color: var(--med-border-subtle);
+  background-color: var(--med-surface-sunken);
+  color: var(--med-text-primary);
+}
+
+/* globals.css sets a blanket `:focus { outline: none }`; restore the ring. */
+.close:focus-visible {
+  outline: 2px solid var(--med-accent);
+  outline-offset: 2px;
+}
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--med-space-4);
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--med-space-2);
+  padding: var(--med-space-3) var(--med-space-4);
+  border-block-start: 1px solid var(--med-border-subtle);
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    animation: none;
+  }
+}

@@ -1,11 +1,11 @@
 import { Button } from "primereact/button"
 import { Dropdown } from "primereact/dropdown"
-import React, { useContext, useEffect, useState } from "react"
+import { useContext, useEffect, useState } from "react"
 import { Card, Col, Form, Row } from "react-bootstrap"
 import { toast } from "react-toastify"
 import { requestBackend } from "../../../../utilities/requests"
 import { ErrorRequestContext } from "../../../generalPurpose/errorRequestContext"
-import { DataContext } from "../../../workspace/dataContext"
+import { useMEDDataStore } from "../../../workspace/useMEDData"
 import { WorkspaceContext } from "../../../workspace/workspaceContext"
 import DocLink from "../../docLink"
 
@@ -23,33 +23,37 @@ const InputForm = ({ nodeForm, changeNodeForm, enableView }) => {
   const [selectedFile, setSelectedFile] = useState("")
   const [selectedDicomFolder, setSelectedDicomFolder] = useState("")
   const [listNpyFiles, setListNpyFiles] = useState([])
-  const [listDicomFolders, setListDicomFolders] = useState([])
   const [loading, setLoading] = useState(false)
   const { workspace, port } = useContext(WorkspaceContext)
   const { setError, setShowError } = useContext(ErrorRequestContext)
-  const { globalData } = useContext(DataContext) // We get the global data from the context
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
   const pageId = "extractionMEDiml" // pageId is used to identify the page in the backend
 
+  const areListsIdentical = (listA, listB) => {
+    return listA.length === listB.length && listA.every((value, index) => value === listB[index]);
+  }
+
   useEffect(() => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let npyFiles = []
-      let dcmFolders = []
       keys.forEach((key) => {
         if (globalData[key].type === "npy" && globalData[key].path) {
           npyFiles.push({ name: globalData[key].name, value: globalData[key].path })
-        } else if (globalData[key].type === "directory" && globalData[key].path) {
-          dcmFolders.push({ name: globalData[key].name, value: globalData[key].path })
         }
       })
       const uniqueNpyFiles = Array.from(new Set(npyFiles.map((file) => file.value))).map((value) => {
         return npyFiles.find((file) => file.value === value)
       })
-      const uniqueDcmFolders = Array.from(new Set(dcmFolders.map((folder) => folder.value))).map((value) => {
-        return dcmFolders.find((folder) => folder.value === value)
-      })
-      setListNpyFiles(uniqueNpyFiles)
-      setListDicomFolders(uniqueDcmFolders)
+      if (!areListsIdentical(uniqueNpyFiles, listNpyFiles)) {
+        setListNpyFiles(uniqueNpyFiles)
+      }
+    }
+    if (nodeForm.input_path && nodeForm.input_type === "npy") {
+      setSelectedFile(nodeForm.input_path)
+    } else if (nodeForm.input_path && nodeForm.input_type === "dicom") {
+      setSelectedDicomFolder(nodeForm.input_path)
     }
   }, [])
 
@@ -58,11 +62,53 @@ const InputForm = ({ nodeForm, changeNodeForm, enableView }) => {
     if (fileList.length > 0) {
       fileList = fileList[0].path
       setSelectedFile(fileList)
+      changeNodeForm({
+        ...nodeForm,
+        target: {name: "input_path", value: fileList}
+      })
+      changeNodeForm({
+        ...nodeForm,
+        target: {name: "input_type", value: "npy"}
+      })
     }
     else {
       setSelectedFile(event.target.files.path)
+      changeNodeForm({
+        ...nodeForm,
+        target: {name: "input_path", value: event.target.files.path}
+      })
+      changeNodeForm({
+        ...nodeForm,
+        target: {name: "input_type", value: "npy"}
+      })
     }
   };
+
+  /**
+   * @param {Event} event change event of the local folder input
+   *
+   * @description
+   * Keeps the path of the folder the user selected. The folder input only lists the files it
+   * contains, so the folder path is the path of a file minus its path relative to the folder.
+   */
+  const handleDicomFolderChange = (event) => {
+    const file = event.target.files[0]
+    if (!file) {
+      toast.error("The selected folder is empty")
+      return
+    }
+    const relativePath = file.webkitRelativePath.split("/")
+    const folderPath = file.path.slice(0, file.path.length - file.webkitRelativePath.length) + relativePath[0]
+    setSelectedDicomFolder(folderPath)
+    changeNodeForm({
+      ...nodeForm,
+      target: {name: "input_path", value: folderPath}
+    })
+    changeNodeForm({
+      ...nodeForm,
+      target: {name: "input_type", value: "dicom"}
+    })
+  }
 
   /**
    * @param {String} fileType type of the file to upload (file or folder)
@@ -205,17 +251,20 @@ const InputForm = ({ nodeForm, changeNodeForm, enableView }) => {
       <Row className="form-group-box flex-column align-items-start">
         <Form.Label htmlFor="file">DICOM image (folder)</Form.Label>
         <Col className="w-100">
-          <Dropdown
-              filter
-              style={{ maxWidth: "300px" }}
-              value={selectedDicomFolder}
-              onChange={(e) => setSelectedDicomFolder(e.value)}
-              options={listDicomFolders}
-              optionLabel="name"
-              className="w-full md:w-14rem margintop8px"
-              display="chip"
-              placeholder="Select a DICOM folder"
+          <Form.Group controlId="enterDicomFolder">
+            <Form.Control
+              name="pathDicomFolder"
+              type="file"
+              webkitdirectory="true"
+              directory="true"
+              onChange={handleDicomFolderChange}
             />
+          </Form.Group>
+          {selectedDicomFolder && (
+            <Form.Text muted style={{ wordBreak: "break-all" }}>
+              Selected folder: {selectedDicomFolder}
+            </Form.Text>
+          )}
         </Col>
         <Col className="w-100" style={{marginBottom: "10px", marginTop: "10px"}}>
           <Button 

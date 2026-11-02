@@ -9,8 +9,8 @@ import { sceneDescription as extractionMEDimlSceneDescription } from "../../publ
 import { sceneDescription as learningMEDimlDefaultSettings } from "../../public/setupVariables/learningMEDimlNodesParams"
 import { LayoutModelContext } from "../layout/layoutContext"
 import { insertMEDDataObjectIfNotExists } from "../mongoDB/mongoDBUtils"
-import { DataContext } from "../workspace/dataContext"
 import { MEDDataObject } from "../workspace/NewMedDataObject"
+import { useMEDDataObject, useMEDDataStore } from "../workspace/useMEDData"
 import ModuleLandingShell, { ModuleGuideText } from "./moduleBasics/ModuleLandingShell"
 
 // Variable used to store some modularity information about the module
@@ -32,40 +32,20 @@ export default function ModulesLandingPage() {
   const [nameMlError, setNameMLError] = useState("")
   const [isExtDisabled, setIsExtDisabled] = useState(true)
   const [isMLDisabled, setIsMLDisabled] = useState(true)
-  const [extrExperimentList, setExtExperimentList] = useState([]) // List of .medext files
-  const [learnExperimentList, setLearnExperimentList] = useState([]) // List of .mediml files
   const [loading, setLoading] = useState(false)
   const [pendingOpenId, setPendingOpenId] = useState(null)
   const { dispatchLayout, setLayoutRequestQueue } = useContext(LayoutModelContext)
-  const { globalData } = useContext(DataContext)
-  
-  // We use the useEffect hook to update the experiment list state when the workspace changes
-  useEffect(() => {
-    let localExtractionExperimentList = []
-    let localLearningExperimentList = []
-    if (!globalData["EXPERIMENTS"]) return
-    for (const experimentId of globalData["EXPERIMENTS"].childrenIDs) {
-      if (globalData[experimentId].name === "EXTRACTION") {
-        for (const sceneId of globalData[experimentId].childrenIDs) {
-          localExtractionExperimentList.push(globalData[sceneId].name)
-        }
-      } else if (globalData[experimentId].name === "LEARNING") {
-        for (const sceneId of globalData[experimentId].childrenIDs) {
-          localLearningExperimentList.push(globalData[sceneId].name)
-        }
-      }
-    }
-    setExtExperimentList(localExtractionExperimentList)
-    setLearnExperimentList(localLearningExperimentList)
-  }, [globalData]) // We log the workspace when it changes
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
+  // Re-renders only when the pending object itself appears/changes - not on every workspace change.
+  const pendingOpenObject = useMEDDataObject(pendingOpenId)
 
   useEffect(() => {
-    if (!pendingOpenId || !globalData[pendingOpenId]) return
+    if (!pendingOpenId || !pendingOpenObject) return
 
     // Update loading state
     setLoading(false)
 
-    const medObject = globalData[pendingOpenId]
+    const medObject = pendingOpenObject
     const openItem = {
       index: pendingOpenId,
       canMove: true,
@@ -92,13 +72,26 @@ export default function ModulesLandingPage() {
     }
     
     setPendingOpenId(null)
-  }, [dispatchLayout, globalData, pendingOpenId, setLayoutRequestQueue])
+  }, [dispatchLayout, pendingOpenObject, pendingOpenId, setLayoutRequestQueue])
+
+  // Computed fresh from the store on every call (instead of a useEffect-derived, potentially
+  // stale state), since these are only ever needed synchronously inside event handlers.
+  const getExperimentNames = (folderName) => {
+    const globalData = medDataStore.snapshot()
+    const experimentsNode = globalData["EXPERIMENTS"]
+    if (!experimentsNode) return []
+    const folderId = experimentsNode.childrenIDs.find((id) => globalData[id]?.name === folderName)
+    const folder = folderId && globalData[folderId]
+    if (!folder) return []
+    return folder.childrenIDs.map((id) => globalData[id]?.name)
+  }
 
   const checkExistingFolders = () => {
     let extractionExists = false
     let extractionFolder = null
     let learningExists = false
     let learningFolder = null
+    const globalData = medDataStore.snapshot()
     let keys = Object.keys(globalData)
     keys.forEach((key) => {
       if (globalData[key].type === "directory" && globalData[key].parentID === "EXPERIMENTS" && globalData[key].name === "EXTRACTION") {
@@ -251,17 +244,11 @@ export default function ModulesLandingPage() {
     setPendingOpenId(sceneObjectId || sceneId)
   }
 
-  function choosePage(event, name) {
-    event.stopPropagation()
-    console.log(`Double clicked ${name}`, event, `open${name}Module`)
-    dispatchLayout({ type: `open${name}Module`, payload: { pageId: name } })
-  }
-
   const onNameExtChange = (e) => {
       setNameExt(e)
     const trimmedName = e.trim()
     const isValidName = /^[A-Za-z0-9_-]+$/.test(trimmedName)
-    const existingNames = new Set(extrExperimentList)
+    const existingNames = new Set(getExperimentNames("EXTRACTION"))
     const hasConflict =
       trimmedName !== "" && (existingNames.has(trimmedName) || existingNames.has(`${trimmedName}.medext`))
     const nameError = trimmedName === ""
@@ -280,7 +267,7 @@ export default function ModulesLandingPage() {
     setNameML(e)
     const trimmedName = e.trim()
     const isValidName = /^[A-Za-z0-9_-]+$/.test(trimmedName)
-    const existingNames = new Set(learnExperimentList)
+    const existingNames = new Set(getExperimentNames("LEARNING"))
     const hasConflict =
       trimmedName !== "" && (existingNames.has(trimmedName) || existingNames.has(`${trimmedName}.mediml`))
     const nameError = trimmedName === ""
@@ -302,8 +289,8 @@ export default function ModulesLandingPage() {
       infoContent={
         <ModuleGuideText>
           <p className="mb-0">
-            MEDiml offers two central modules: one for radiomic features extraction and another for machine learning. 
-            The Extraction Module allows you to easily extract radiomic features from your medical images, 
+            MEDiml offers two central modules: one for exploratory radiomic feature extraction and another for machine learning. 
+            The Extraction Module allows you to explore the impact of different preprocessing and extraction parameters on the radiomic features derived from your medical images, 
             while the Learning Module enables model training, testing, and explanation of your model's predictions. 
             Create a new scene to get started!
           </p>
@@ -331,8 +318,7 @@ export default function ModulesLandingPage() {
           <Card.Body className="d-flex flex-column justify-content-center align-items-center p-4">
             <Pickaxe width={120} height={120} color="#3269ce"/>
             <Card.Text className="mt-3 text-center">
-              Extract radiomics features from your medical images and create comprehensive 
-              datasets for your machine learning projects.
+              Explore the impact of different preprocessing and extraction parameters on the radiomic features derived from your medical images before bacth analysis.
             </Card.Text>
             <div 
               className="p-inputgroup w-full my-3"

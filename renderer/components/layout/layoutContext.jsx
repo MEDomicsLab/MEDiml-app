@@ -1,8 +1,10 @@
-import React, { createContext, useState, useContext } from "react"
+import React, { createContext, useState } from "react"
 import { useEffect } from "react"
+import fs from "fs"
+import { confirmDialog } from "primereact/confirmdialog"
 import { toast } from "react-toastify"
-import { DataContext } from "../workspace/dataContext"
-import { overwriteMEDDataObjectProperties, collectionExists } from "../mongoDB/mongoDBUtils"
+import { useMEDDataStore } from "../workspace/useMEDData"
+import { overwriteMEDDataObjectProperties, collectionExists, ensureContentCollection, isContentStale, reimportFileContent } from "../mongoDB/mongoDBUtils"
 
 /**
  * @typedef {React.Context} LayoutModelContext
@@ -68,7 +70,7 @@ function LayoutModelProvider({ children, layoutModel, setLayoutModel }) {
    * @param {Object} action - The action passed on by the components that use/modify the layout model
    * @description This function is used to dispatch the actions passed on by the components that use/modify the layout model - [Switch case] It dispaches the actions according to their type
    */
-  const { globalData } = useContext(DataContext)
+  const medDataStore = useMEDDataStore() // stable handle - reading it here subscribes to nothing
   const dispatchLayout = (action) => {
     if (developerMode) {
       switch (action.type) {
@@ -86,7 +88,7 @@ function LayoutModelProvider({ children, layoutModel, setLayoutModel }) {
         case "openInCodeEditor":
           return openCodeEditor(action)
         case "openInImageViewer":
-          return openImageViewer(action, globalData)
+          return openImageViewer(action)
         case "openInPDFViewer":
           return openPDFViewer(action)
         case "openInTextEditor":
@@ -184,7 +186,7 @@ function LayoutModelProvider({ children, layoutModel, setLayoutModel }) {
    * @params {Object} action - The action passed on by the dispatchLayout function
    * @params {String} component - The component to be used in the tab
    */
-  function openInDotDotDot(action, component, globalData) {
+  function openInDotDotDot(action, component) {
     let medObject = action.payload
     let isAlreadyIn = checkIfIDIsInLayoutModel(medObject.index, layoutModel)
     if (!isAlreadyIn) {
@@ -194,7 +196,7 @@ function LayoutModelProvider({ children, layoutModel, setLayoutModel }) {
         name: medObject.data,
         id: medObject.index,
         component: component,
-        config: { path: globalData[medObject.index].path, uuid: medObject.index, extension: medObject.type }
+        config: { path: medDataStore.get(medObject.index)?.path, uuid: medObject.index, extension: medObject.type }
       }
       let layoutRequestQueueCopy = [...layoutRequestQueue]
       layoutRequestQueueCopy.push({ type: "ADD_TAB", payload: newChild })
@@ -308,7 +310,7 @@ function LayoutModelProvider({ children, layoutModel, setLayoutModel }) {
    * @params {Object} action - The action passed on by the dispatchLayout function
    */
   const openInDtale = (action) => {
-    openInDotDotDot(action, "dtale", globalData)
+    openInDotDotDot(action, "dtale")
   }
 
   /**
@@ -316,7 +318,7 @@ function LayoutModelProvider({ children, layoutModel, setLayoutModel }) {
    * @params {Object} action - The action passed on by the dispatchLayout function
    */
   const openInPandasProfiling = (action) => {
-    openInDotDotDot(action, "pandasProfiling", globalData)
+    openInDotDotDot(action, "pandasProfiling")
   }
 
   /**
@@ -324,7 +326,7 @@ function LayoutModelProvider({ children, layoutModel, setLayoutModel }) {
    * @params {Object} action - The action passed on by the dispatchLayout function
    */
   const openPDFViewer = (action) => {
-    openInDotDotDot(action, "pdfViewer", globalData)
+    openInDotDotDot(action, "pdfViewer")
   }
 
   /**
@@ -332,15 +334,15 @@ function LayoutModelProvider({ children, layoutModel, setLayoutModel }) {
    * @params {Object} action - The action passed on by the dispatchLayout function
    */
   const openTextEditor = (action) => {
-    openInDotDotDot(action, "textEditor", globalData)
+    openInDotDotDot(action, "textEditor")
   }
 
   /**
    * @summary Function that adds a tab with an image viewer to the layout model
    * @params {Object} action - The action passed on by the dispatchLayout function
    */
-  const openImageViewer = (action, globalData) => {
-    openInDotDotDot(action, "imageViewer", globalData)
+  const openImageViewer = (action) => {
+    openInDotDotDot(action, "imageViewer")
   }
 
   /**
@@ -364,7 +366,7 @@ function LayoutModelProvider({ children, layoutModel, setLayoutModel }) {
    * @params {Object} action - The action passed on by the dispatchLayout function, it uses the payload in the action as a JSON object to add a tab containing a data table to the layout model
    */
   const openDataTable = (action) => {
-    openInDotDotDot(action, "dataTable", globalData)
+    openInDotDotDot(action, "dataTable")
   }
 
   /**
@@ -373,24 +375,45 @@ function LayoutModelProvider({ children, layoutModel, setLayoutModel }) {
    */
   const openDataTableFromDB = async (action) => {
     let object = action.payload
+    const record = medDataStore.get(object.index)
 
     // Check if the path is null before proceeding. Useful for input tools generated files
-    if (!globalData[object.index].path) {
+    if (!record?.path) {
       openInTab(action, "dataTableFromDB")
       return
     }
-    const doesCollectionExists = await collectionExists(object.index)
+    const onDisk = fs.existsSync(record.path)
 
-    if (!doesCollectionExists) {
-      toast.error("The collection does not exist in the database. Try reloading the page.")
-      /* if (fileSize > maxBSONSize) {
-        // await ConvertBinaryToOriginalData(globalData, object)
-        // setTimeout(() => openInTab(action, "dataTableFromDB"), 1500)
-        toast.warn("The file is too large to be displayed in the data table.")
-      } */
-    } else {
-      openInTab(action, "dataTableFromDB")
+    try {
+      if (!(await collectionExists(object.index))) {
+        if (!onDisk) {
+          toast.error(`${record.name} is not in the database and was not found on disk.`)
+          return
+        }
+        // Files added to the workspace outside the app are synced as metadata only; their content
+        // is imported here, the first time they are opened.
+        toast.info(`Importing ${record.name}...`)
+        await ensureContentCollection(object.index, record.path, record.type)
+      } else if (onDisk && (await isContentStale(object.index, record.path))) {
+        const reload = await new Promise((resolve) =>
+          confirmDialog({
+            header: "File changed on disk",
+            message: `${record.name} changed on disk since it was loaded. Reload it? Unexported edits made in MEDiml will be lost.`,
+            icon: "pi pi-exclamation-triangle",
+            acceptLabel: "Reload",
+            rejectLabel: "Keep current copy",
+            accept: () => resolve(true),
+            reject: () => resolve(false)
+          })
+        )
+        if (reload) await reimportFileContent(object.index, record.path, record.type)
+      }
+    } catch (error) {
+      console.error(`Could not load ${record.name} into the database:`, error)
+      toast.error(`Could not load ${record.name}: ${error.message}`)
+      return
     }
+    openInTab(action, "dataTableFromDB")
   }
 
   /**
@@ -407,7 +430,7 @@ function LayoutModelProvider({ children, layoutModel, setLayoutModel }) {
    * @params {Object} action - The action passed on by the dispatchLayout function
    */
   const openCodeEditor = (action) => {
-    openInDotDotDot(action, "codeEditor", globalData)
+    openInDotDotDot(action, "codeEditor")
   }
 
   /**
@@ -415,7 +438,7 @@ function LayoutModelProvider({ children, layoutModel, setLayoutModel }) {
    * @params {Object} action - The action passed on by the dispatchLayout function
    */
   const openInExploratory = (action) => {
-    openInDotDotDot(action, "exploratoryPage", globalData)
+    openInDotDotDot(action, "exploratoryPage")
   }
 
   /**

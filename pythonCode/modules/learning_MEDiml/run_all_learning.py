@@ -28,6 +28,7 @@ class GoExecScriptRunMEDimlMlExperiment(GoExecutionScript):
         self.storing_mode = USE_SAVE_FOR_EXPERIMENTS_STORING
         self.current_experiment = None
         self._progress_update_frequency_HZ = 1.0
+        self._stop_progress = threading.Event()
         self.progress_thread = threading.Thread(target=self._update_progress_periodically, args=())
         self.progress_thread.daemon = True
         self.progress_thread.start()
@@ -41,6 +42,9 @@ class GoExecScriptRunMEDimlMlExperiment(GoExecutionScript):
         # Run all pipelines
         if self._id.lower().startswith("generate_pips"):
             results_pipeline = self.current_experiment.generate_notebooks()
+        elif json_config.get("finalize_model"):
+            # Train the final model of one pipeline on the whole learning set
+            results_pipeline = self.current_experiment.finalize_model()
         else:
             results_pipeline = self.current_experiment.run_all()
 
@@ -58,10 +62,18 @@ class GoExecScriptRunMEDimlMlExperiment(GoExecutionScript):
             self.set_progress(now=0, label="")
 
     def _update_progress_periodically(self):
-        while True:
+        while not self._stop_progress.is_set():
             self.update_progress()
             self.push_progress()
-            time.sleep(1.0 / self._progress_update_frequency_HZ)
+            self._stop_progress.wait(1.0 / self._progress_update_frequency_HZ)
+
+    def stop_progress_updates(self):
+        """
+        Stops the progress thread. It must not be running when the interpreter shuts down: the process
+        then crashes (exit status 0xc0000409 on Windows) and the Go server discards the response.
+        """
+        self._stop_progress.set()
+        self.progress_thread.join(timeout=5)
 
 
 # TODO: Implement a MEDiml save/load experiment function
@@ -100,4 +112,7 @@ def is_experiment_exist(id_):
     return os.path.exists('local_dir/MEDexperiment_' + id_ + '.medexp')
 
 run_all_learning = GoExecScriptRunMEDimlMlExperiment(json_params_dict, id_)
-run_all_learning.start()
+try:
+    run_all_learning.start()
+finally:
+    run_all_learning.stop_progress_updates()

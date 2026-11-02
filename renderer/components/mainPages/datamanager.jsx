@@ -1,23 +1,75 @@
 import { Button } from "primereact/button"
-import { Dropdown } from "primereact/dropdown"
 import { InputSwitch } from "primereact/inputswitch"
 import { InputText } from 'primereact/inputtext'
 import { MultiSelect } from 'primereact/multiselect'
-import { ProgressSpinner } from 'primereact/progressspinner';
+import { ProgressSpinner } from 'primereact/progressspinner'
 import { SelectButton } from 'primereact/selectbutton'
-import React, { useContext, useEffect, useState } from 'react'
-import { Alert, Card, Col, Container, Form, Offcanvas, ProgressBar, Row } from 'react-bootstrap'
+import React, { useContext, useEffect, useRef, useState } from 'react'
+import { Alert, Card, Container, Form, Offcanvas, ProgressBar, Row } from 'react-bootstrap'
 import Table from 'react-bootstrap/Table'
 import { toast } from 'react-toastify'
 import Lightbox from "yet-another-react-lightbox"
 import Fullscreen from "yet-another-react-lightbox/plugins/fullscreen"
 import Zoom from "yet-another-react-lightbox/plugins/zoom"
 import "yet-another-react-lightbox/styles.css"
+import MEDIML_DOCS from "../../utilities/medimlDocs"
 import { requestBackend } from "../../utilities/requests"
+import InputDataDoc, { INPUT_DATA_DOC_TITLE } from "../docs/InputDataDoc"
+import RoiCsvDoc, { ROI_CSV_DOC_TITLE } from "../docs/RoiCsvDoc"
 import DocLink from "../extractionMEDiml/docLink"
+import SourcePicker from "../extractionMEDiml/SourcePicker"
 import { ErrorRequestContext } from "../generalPurpose/errorRequestContext"
-import { DataContext } from "../workspace/dataContext"
+import Caption from "../primitives/Caption"
+import Disclosure from "../primitives/Disclosure"
+import Field from "../primitives/Field"
+import ParamGrid from "../primitives/ParamGrid"
+import SectionCard from "../primitives/SectionCard"
+import Toolbar from "../primitives/Toolbar"
+import { useMEDDataObjectsByType, useMEDDataStore } from "../workspace/useMEDData"
 import { WorkspaceContext } from "../workspace/workspaceContext"
+
+/**
+ * Label, hint and documentation link for the pre-checks dataset folder, by
+ * on-disk format. Hoisted to module level because the same three-way lookup
+ * used to be written out separately in the workspace and local branches, and
+ * the two copies had already drifted apart.
+ */
+const PRECHECK_DATASET = {
+  npy: {
+    label: "NPY dataset folder",
+    hint: "Folder containing the MEDscan objects (.npy) to check. These are produced by the data processing step above.",
+    doc: MEDIML_DOCS.dataManager
+  },
+  nifti: {
+    label: "NIfTI dataset folder",
+    hint: "Folder containing the NIfTI files (.nii / .nii.gz) to check.",
+    doc: MEDIML_DOCS.inputDataNifti
+  },
+  dicom: {
+    label: "DICOM dataset folder",
+    hint: "Folder containing the DICOM files (.dcm) to check.",
+    doc: MEDIML_DOCS.inputDataDicom
+  }
+}
+
+/**
+ * Label, hint and documentation link for the dataset folder to process, by
+ * on-disk format.
+ */
+const PROCESS_DATASET = {
+  dicom: {
+    label: "DICOM dataset folder",
+    hint: "Folder holding the DICOM study you want to convert into MEDscan objects. MEDiml expects the standard layout, one folder per patient and one sub-folder per imaging scan.",
+    doc: MEDIML_DOCS.inputDataDicom
+  },
+  nifti: {
+    label: "NIfTI dataset folder",
+    hint: "Folder holding the NIfTI files to convert. File names must follow the MEDiml convention, PatientID__ImagingScanName(ROIname).Modality.nii.gz, so scans and their masks can be paired.",
+    doc: MEDIML_DOCS.inputDataNifti
+  }
+}
+
+const DEFAULT_N_CORES = 12
 
 /**
  * @param {Object} nodeForm form associated to the discretization node
@@ -31,7 +83,10 @@ import { WorkspaceContext } from "../workspace/workspaceContext"
 const DataManager = ({ pageId, configPath = "" }) => {
   const { port } = useContext(WorkspaceContext)
   const { setError, setShowError } = useContext(ErrorRequestContext)
-  const { globalData } = useContext(DataContext) // Get the workspace data
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
+  // Re-run the folder/csv list updates only when the set of directories/csv files actually
+  // changes, instead of on every unrelated workspace change.
+  const relevantIds = useMEDDataObjectsByType(["directory", "csv"])
   const [progress, setProgress] = useState(0)
   const [open, setOpen] = useState(false)
   const [refreshEnabled, setRefreshEnabled] = useState(false) // A boolean variable to control refresh
@@ -44,7 +99,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
   const [selectedSaveFolder, setSelectedSaveFolder] = useState('')
   const [selectedSavePreChecksFolder, setSelectedSavePreChecksFolder] = useState('')
   const [selectedNpyFolder, setSelectedNpyFolder] = useState('')
-  const [selectedNBatch, setSelectedNBatch] = useState(12)
+  const [selectedNBatch, setSelectedNBatch] = useState(DEFAULT_N_CORES)
   const [selectedCSVFile, setSelectedCSVFile] = useState('')
   const [selectedPreChecksOptions, setSelectedPreChecksOptions] = useState(null)
   const [selectedInstitutions, setSelectedInstitutions] = useState([])
@@ -58,12 +113,14 @@ const DataManager = ({ pageId, configPath = "" }) => {
   const handleOffCanvasShow = () => setShowOffCanvas(true) // used to show the offcanvas
   const [preChecksImages, setPreChecksImages] = useState([]) // used to display the offcanvas
   const [preChecksImagesUrls, setPreChecksImagesUrls] = useState([]) // used to display the offcanvas
-  const [useWorkspace, setUseWorkspace] = useState(true) // A boolean variable to control the use of the workspace
-  const [useWorkspacePC, setUseWorkspacePC] = useState(true) // A boolean variable to control the use of the workspace for pre-checks
+  const [useWorkspace, setUseWorkspace] = useState(false) // A boolean variable to control the use of the workspace
+  const [useWorkspacePC, setUseWorkspacePC] = useState(false) // A boolean variable to control the use of the workspace for pre-checks
   const [runVoxelChecks, setRunVoxelChecks] = useState(true) // Voxel (dimensions) pre-checks
   const [runWindowChecks, setRunWindowChecks] = useState(true) // Window (intensity) pre-checks
-  const [useDatasetType, setUseDatasetType] = useState("npy") // Dataset format for pre-checks: npy, nifti, or dicom
+  const [useDatasetType, setUseDatasetType] = useState("dicom") // Dataset format for pre-checks: npy, nifti, or dicom
+  const [processDatasetType, setProcessDatasetType] = useState("dicom") // Dataset format to process: dicom or nifti
   const [isScanningNpyFolder, setIsScanningNpyFolder] = useState(false)
+  const csvFileInputRef = useRef(null) // Used to reset the local ROI CSV file input, since the file is optional
 
   useEffect(() => {
     updateWSfolder()
@@ -73,9 +130,10 @@ const DataManager = ({ pageId, configPath = "" }) => {
   useEffect(() => {
     updateWSfolder()
     updateCSVFilesList()
-    }, [globalData])
+    }, [relevantIds])
 
   const updateWSfolder = () => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let wsFolders = []
@@ -89,6 +147,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
   }
 
   const updateCSVFilesList = () => {
+    const globalData = medDataStore.snapshot()
     if (globalData !== undefined) {
       let keys = Object.keys(globalData)
       let csvFiles = []
@@ -98,92 +157,6 @@ const DataManager = ({ pageId, configPath = "" }) => {
         }
       })
       setListCSVFiles(csvFiles)
-    }
-  }
-
-  const handleDcmFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      }
-      setSelectedDcmFolder(fileList)
-    }
-    else {
-      setSelectedDcmFolder(event.target.files.path)
-    }
-  };
-
-
-  const handleDatasetFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      }
-      setSelectedDatasetFolder(fileList)
-    }
-    else {
-      setSelectedDatasetFolder(event.target.files.path)
-    }
-  };
-
-  const handleSaveFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      }
-      setSelectedSaveFolder(fileList)
-    }
-    else {
-      setSelectedSaveFolder(event.target.files.path)
-    }
-  }
-
-  const handleChecksSaveFolderChange = (event) => {
-    var fileList = event.target.files
-    if (fileList.length > 0) {
-      fileList = fileList[0].path
-      // The path of the image needs to be the path of the common folder of all the files
-      // If the directory is constructed according to standard DICOM format, the path
-      // of the image is the one containning the folders image and mask
-      if (fileList.indexOf("\\") >= 0) {
-        fileList = fileList.split("\\").slice(0, -1).join("\\")
-      } else if (fileList.indexOf("/") >= 0) {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      } else {
-        fileList = fileList.split("/").slice(0, -1).join("/")
-      }
-      setSelectedSavePreChecksFolder(fileList)
-    }
-    else {
-      setSelectedSavePreChecksFolder(event.target.files.path)
     }
   }
 
@@ -203,11 +176,34 @@ const DataManager = ({ pageId, configPath = "" }) => {
     }
   };
 
+  /**
+   * @description Clears the selected local ROI CSV file, since it is optional.
+   */
+  const handleClearCSVFile = () => {
+    setSelectedCSVFile('')
+    if (csvFileInputRef.current) {
+      csvFileInputRef.current.value = ''
+    }
+  };
+
   const fs = require('fs');
 
-  const handleNpyFolderChange = (event) => {
-    const path = event.value;
+  /**
+   * @param {string} path Folder path chosen from the workspace.
+   *
+   * Takes a path string rather than a PrimeReact event, so the workspace and
+   * local branches can share one <SourcePicker>.
+   *
+   * It also sets selectedDatasetFolder, which it previously did not. That was a
+   * bug: handlePreChecksRunClick guards on selectedDatasetFolder and sends it as
+   * `pathData`, but in workspace mode only selectedNpyFolder was ever written --
+   * so choosing a folder from the workspace and pressing RUN aborted with
+   * "Please select a dataset folder". The local branch set it correctly, which
+   * is why this only ever failed in workspace mode.
+   */
+  const handleNpyFolderChange = (path) => {
     setSelectedNpyFolder(path)
+    setSelectedDatasetFolder(path)
 
     // Clear previous pre-checks options
     setSelectedPreChecksOptions({
@@ -450,6 +446,32 @@ const DataManager = ({ pageId, configPath = "" }) => {
       institutions: formatOptions(institutions),
       modalities: formatOptions(modalities)
     });
+  }
+
+  // The one folder input of the Process card shows the path of the selected format
+  const processFolder = processDatasetType === "dicom" ? selectedDcmFolder : selectedNiftiFolder
+
+  /**
+   * @description Stores the dataset folder to process under its format, and clears the other
+   * format's folder, so the request never carries a DICOM and a NIfTI folder at once.
+   * @param {string} format - The dataset format, "dicom" or "nifti"
+   * @param {string} path - The path of the dataset folder
+   */
+  const setProcessFolder = (format, path) => {
+    setSelectedDcmFolder(format === "dicom" ? path : '')
+    setSelectedNiftiFolder(format === "nifti" ? path : '')
+  }
+
+  /**
+   * @description Changes the format of the dataset to process, keeping the selected folder.
+   * @param {string} format - The new dataset format, null when the active option is clicked again
+   */
+  const handleProcessDatasetTypeChange = (format) => {
+    if (!format) {
+      return
+    }
+    setProcessFolder(format, processFolder)
+    setProcessDatasetType(format)
   }
 
   /**
@@ -732,183 +754,125 @@ const DataManager = ({ pageId, configPath = "" }) => {
       <Card.Body>
         <Card.Header>
             <h4>Data Manager - Process data</h4>
-            <DocLink 
-              linkString={"https://mediml.readthedocs.io/en/latest/tutorials.html#datamanager"} 
-              name={"What is DataManager?"} 
-              image={"https://www.svgrepo.com/show/521262/warning-circle.svg"} 
+            <DocLink
+              linkString={"https://medomicslab.gitbook.io/mediml-app-docs/radiomics/data-processing/data-manager"}
+              name={"What is DataManager?"}
+              image={"https://www.svgrepo.com/show/521262/warning-circle.svg"}
             />
         </Card.Header>
       <Form className="inputFile">
-      {/* Check if workspace is gonna be used or not*/}
-      <Row className="form-group-box">
-        <Form.Label htmlFor="file">Use Workspace Data (Recommanded)</Form.Label>
-        <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-          If this is checked, the data available in the workspace will be used instead of local data.
-        </p>
-        <Col style={{ width: "150px" }}>
-          <InputSwitch
-            checked={useWorkspace}
-            onChange={(e) => setUseWorkspace(e.value)}
+      {/* Check if workspace is gonna be used or not */}
+      <SectionCard
+        row
+        align="center"
+        title="Use workspace data"
+        hint="Read the input data from the current workspace instead of picking folders from disk. Workspace folders are the ones listed in the explorer on the left."
+      >
+        <InputSwitch
+          checked={useWorkspace}
+          onChange={(e) => setUseWorkspace(e.value)}
+        />
+      </SectionCard>
+
+      {/* DATASET FORMAT */}
+        <SectionCard
+          row
+          align="center"
+          title="Dataset format"
+          doc={{ title: INPUT_DATA_DOC_TITLE, content: <InputDataDoc formats={["dicom", "nifti"]} selected={processDatasetType} /> }}
+          docHref={MEDIML_DOCS.inputDataDev}
+        >
+          <SelectButton
+            value={processDatasetType}
+            onChange={(e) => handleProcessDatasetTypeChange(e.value)}
+            optionLabel="label"
+            options={[
+              { label: 'DICOM', value: "dicom" },
+              { label: 'NIfTI', value: "nifti" }
+            ]}
           />
-        </Col>
-      </Row>
+        </SectionCard>
 
-      {/* UPLOAD DICOM DATASET FOLDER*/}
-        <Row className="form-group-box">
-          <Form.Label className="dcm-path" htmlFor="file">
-              DICOM dataset folder
-          </Form.Label>
-          <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-            Path to the DICOM dataset folder you want to process
-          </p>
-          {useWorkspace ? (
-            <Col style={{ width: "150px" }}>
-              <Dropdown
-                style={{ maxWidth: "100%", height: "auto", width: "auto" }}
-                filter
-                value={selectedDcmFolder}
-                onChange={(e) => setSelectedDcmFolder(e.value)}
-                options={listWSFolders}
-                optionLabel="name"
-                display="chip"
-                placeholder="Select a folder"
-              />
-            </Col> ) : (
-            <Col style={{ width: "150px" }}>
-              <Form.Group controlId="enterFile">
-                <Form.Control
-                  name="pathDicoms"
-                  type="file"
-                  webkitdirectory="true"
-                  directory="true"
-                  onChange={handleDcmFolderChange}
-                />
-              </Form.Group>
-            </Col> 
-          )}
-        </Row>
+      {/* UPLOAD DATASET FOLDER */}
+        <SectionCard
+          row
+          title={PROCESS_DATASET[processDatasetType].label}
+          hint={PROCESS_DATASET[processDatasetType].hint}
+          docHref={PROCESS_DATASET[processDatasetType].doc}
+        >
+          <SourcePicker
+            mode={useWorkspace ? "workspace" : "local"}
+            kind="folder"
+            name={processDatasetType === "dicom" ? "pathDicoms" : "pathNiftis"}
+            options={listWSFolders}
+            value={processFolder}
+            onPathChange={(path) => setProcessFolder(processDatasetType, path)}
+          />
+        </SectionCard>
 
-        {/* UPLOAD NIfTI DATASET FOLDER*/}
-        <Row className="form-group-box">
-          <Form.Label 
-            className="nifti-path"
-            htmlFor="file">
-              NIfTI dataset folder
-          </Form.Label>
-          <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-            Path to the NIfTI dataset folder you want to process
-          </p>
-          {useWorkspace ? (
-            <Col style={{ width: "150px" }}>
-              <Dropdown
-                style={{ maxWidth: "100%", height: "auto", width: "auto" }}
-                filter
-                value={selectedNiftiFolder}
-                onChange={(e) => setSelectedNiftiFolder(e.value)}
-                options={listWSFolders}
-                optionLabel="name"
-                display="chip"
-                placeholder="Select a folder"
-              />
-            </Col> ) : (
-            <Col style={{ width: "150px" }}>
-              <Form.Group controlId="enterFile">
-                <Form.Control
-                  name="pathNiftis"
-                  type="file"
-                  webkitdirectory="true"
-                  directory="true"
-                  onChange={handleDatasetFolderChange}
-                />
-              </Form.Group>
-            </Col>
-          )}
-        </Row>
+        {/* SAVE FOLDER */}
+        <SectionCard
+          row
+          title="Save folder"
+          hint="Where the processed MEDscan objects (.npy) are written."
+        >
+          <SourcePicker
+            mode={useWorkspace ? "workspace" : "local"}
+            kind="folder"
+            name="pathSave"
+            options={listWSFolders}
+            value={selectedSaveFolder}
+            onPathChange={setSelectedSaveFolder}
+            placeholder="Select a folder"
+          />
+        </SectionCard>
 
-        {/* UPLOAD SAVING FOLDER*/}
-        <Row className="form-group-box">
-          <Form.Label 
-            className="save-path"
-            htmlFor="file">
-              Saving Options
-          </Form.Label>
-          <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-            Folder to where the processed data will be saved
-          </p>
-          {useWorkspace ? (
-            <Col style={{ width: "150px" }}>
-              <h6>Save in workspace</h6>
-              <Dropdown
-                style={{ maxWidth: "100%", height: "auto", width: "auto" }}
-                filter
-                value={selectedSaveFolder}
-                onChange={(e) => setSelectedSaveFolder(e.value)}
-                options={listWSFolders}
-                optionLabel="name"
-                display="chip"
-                placeholder="Select Saving Folder"
-              />
-            </Col>
-          ) : (
-            <Col style={{ width: "150px" }}>
-              <h6>Save in a local path</h6>
-              <Form.Group controlId="enterFile">
-                <Form.Control
-                  name="pathSave"
-                  type="file"
-                  webkitdirectory="true"
-                  directory="true"
-                  onChange={handleSaveFolderChange}
-                />
-              </Form.Group>
-            </Col>
-          )}
-          {/* NUMBER OF BATCH*/}
-          <Col>
-            <h6 className="nbatch">
-              Number of cores to use :
-            </h6>
-            <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-              Number of cores to use for the parallel processing
-            </p>
+        {/* NUMBER OF BATCH */}
+        <Disclosure
+          title="Advanced"
+          modifiedCount={selectedNBatch !== DEFAULT_N_CORES ? 1 : 0}
+        >
+          <SectionCard
+            row
+            align="center"
+            title="Cores"
+            hint="Number of CPU cores used for the parallel conversion."
+          >
             <Form.Control
               name="nBatch"
               type="number"
-              defaultValue={12}
-              placeholder={"Default: " + 12}
+              defaultValue={DEFAULT_N_CORES}
+              placeholder={"Default: " + DEFAULT_N_CORES}
               onChange={handleNBatchChange}
+              aria-label="Number of cores"
             />
-          </Col>
-        </Row>
+          </SectionCard>
+        </Disclosure>
       </Form>
 
       {/* PROCESS BUTTON*/}
-      <Row className="form-group-box">
-        <Col>
-            <Button
-              severity="success"
-              label="Process"
-              name="ProcessButton"
-              onClick={handleProcessClick}
-              disabled={(!selectedDcmFolder || !selectedSaveFolder || refreshEnabled) && (!selectedNiftiFolder || !selectedSaveFolder)}
-              icon="pi pi-wrench"
-              raised
-              rounded
-              loading={refreshEnabled}
-            />
-          </Col>
-        <Col>
-          <Button
-            severity="secondary"
-            label="Show Summary"
-            name="ShowSummaryButton"
-            onClick={handleOffCanvasShow}
-            icon="pi pi-list"
-            raised
-            rounded
-          />
-        </Col>
-      </Row>
+      <Toolbar>
+        <Button
+          severity="success"
+          label="Process"
+          name="ProcessButton"
+          onClick={handleProcessClick}
+          disabled={!processFolder || !selectedSaveFolder || refreshEnabled}
+          icon="pi pi-wrench"
+          raised
+          rounded
+          loading={refreshEnabled}
+        />
+        <Button
+          severity="secondary"
+          label="Show Summary"
+          name="ShowSummaryButton"
+          onClick={handleOffCanvasShow}
+          icon="pi pi-list"
+          raised
+          rounded
+        />
+      </Toolbar>
 
         {/* PROGRESS BAR*/}
         {(refreshEnabled || progress === 100 || progress !== 0) && (
@@ -965,301 +929,216 @@ const DataManager = ({ pageId, configPath = "" }) => {
         </Card.Header>
 
         {/* Check if workspace is gonna be used or not*/}
-        <Row className="form-group-box">
-          <Form.Label htmlFor="file">Use Workspace Data (Recommanded)</Form.Label>
-          <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-            If this is checked, the data available in the workspace will be used instead of local data.
-          </p>
-          <Col style={{ width: "150px" }}>
-            <InputSwitch
-              checked={useWorkspacePC}
-              onChange={(e) => setUseWorkspacePC(e.value)}
-            />
-          </Col>
-        </Row>
+        <SectionCard
+          row
+          align="center"
+          title="Use workspace data"
+          hint="Read the dataset and the ROI CSV from the current workspace instead of picking them from disk."
+        >
+          <InputSwitch
+            checked={useWorkspacePC}
+            onChange={(e) => setUseWorkspacePC(e.value)}
+          />
+        </SectionCard>
 
-        <Row className="form-group-box">
+        {/* This selector had no label at all. */}
+        <SectionCard
+          row
+          align="center"
+          title="Dataset format"
+          doc={{ title: INPUT_DATA_DOC_TITLE, content: <InputDataDoc formats={["dicom", "nifti", "npy"]} selected={useDatasetType} /> }}
+          docHref={MEDIML_DOCS.inputDataDev}
+        >
           <SelectButton
             value={useDatasetType}
             onChange={(e) => setUseDatasetType(e.value)}
             optionLabel="label"
             options={[
-              { label: 'Use NPY', value: "npy" },
-              { label: 'Use NIfTI', value: "nifti" },
-              { label: 'Use DICOM', value: "dicom" }
+              { label: 'DICOM', value: "dicom" },
+              { label: 'NIfTI', value: "nifti" },
+              { label: 'NPY', value: "npy" }
             ]}
-            style={{ width: '100%', marginBottom: '10px' }}
           />
-        </Row>
+        </SectionCard>
 
-        {useWorkspacePC ?  (
-          <Row className="form-group-box">
-            <Col style={{ width: "150px" }}>
-              <h6 className="csv-file-ws">CSV from workspace</h6>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-                CSV file containing the scans to check and their associated ROIs (Region of Interest)
-              </p>
-              <Dropdown
-                style={{ maxWidth: "100%", height: "auto", width: "auto" }}
-                filter
-                value={selectedCSVFile}
-                onChange={(e) => setSelectedCSVFile(e.value)}
-                options={listCSVFiles}
-                optionLabel="name"
-                display="chip"
-                placeholder="Select a file"
-              />
-            </Col>
-            <Col style={{ width: "150px" }}>
-              <h6 className="npy-dataset-ws">
-                {{
-                  npy: 'NPY dataset from workspace',
-                  nifti: 'NIfTI dataset from workspace',
-                  dicom: 'DICOM dataset from workspace'
-                }[useDatasetType]}
-              </h6>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-                {{
-                  npy: 'Folder containing the .npy files to check',
-                  nifti: 'Folder containing the .nii files to check',
-                  dicom: 'Folder containing the .dcm files to check'
-                }[useDatasetType]}
-              </p>
-              <Dropdown
-                style={{ maxWidth: "100%", height: "auto", width: "auto" }}
-                filter
-                value={selectedNpyFolder}
-                onChange={handleNpyFolderChange}
-                options={listWSFolders}
-                optionLabel="name"
-                display="chip"
-                placeholder="Select a folder"
-              />
-            </Col>
-            <Col style={{ width: "150px" }}>
-              <h6 className="npy-dataset-ws">Save in workspace</h6>
-              <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-                Folder containing the .npy files to check
-              </p>
-              <Dropdown
-                style={{ maxWidth: "100%", height: "auto", width: "auto" }}
-                filter
-                value={selectedSavePreChecksFolder}
-                onChange={(e) => setSelectedSavePreChecksFolder(e.value)}
-                options={listWSFolders}
-                optionLabel="name"
-                display="chip"
-                placeholder="Select Saving Folder"
-              />
-            </Col>
-          </Row> ) : (
-              
-          <Row className="form-group-box">
-            <Col style={{ width: "150px" }}>
-              <Form method="post" encType="multipart/form-data" className="inputFile">
-                {/* UPLOAD CSV FILE*/}
-                <Form.Label 
-                  className="csv-file"
-                  htmlFor="file">
-                    Local CSV File
-                </Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-                  CSV file containing the scans to check and their associated ROI (Region of Interest)
-                </p>
-                <Form.Group controlId="enterFile">
-                  <Form.Control
-                    name="pathCSV"
-                    type="file"
-                    onChange={handleCSVFileChange}
-                  />
-                </Form.Group>
-              </Form>
-            </Col>
+        {/* UPLOAD CSV FILE*/}
+        <SectionCard
+          row
+          title="Custom List of ROIs to Analyze"
+          badge="optional"
+          doc={{ title: ROI_CSV_DOC_TITLE, content: <RoiCsvDoc /> }}
+          docHref={MEDIML_DOCS.roiCsvDev}
+        >
+          <SourcePicker
+            mode={useWorkspacePC ? "workspace" : "local"}
+            kind="file"
+            accept=".csv"
+            name="pathCSV"
+            options={listCSVFiles}
+            value={selectedCSVFile}
+            onPathChange={setSelectedCSVFile}
+            onLocalChange={handleCSVFileChange}
+            inputRef={csvFileInputRef}
+            showClear
+            placeholder="Union of all ROIs"
+            action={
+              selectedCSVFile && !useWorkspacePC ? (
+                <Button
+                  type="button"
+                  severity="secondary"
+                  label="Clear"
+                  name="ClearCSVButton"
+                  onClick={handleClearCSVFile}
+                  icon="pi pi-times"
+                  iconPos="left"
+                  text
+                />
+              ) : null
+            }
+          />
+        </SectionCard>
 
-            {/* DATASET FOLDER*/}
-            <Col style={{ width: "150px" }}>
-              <Form method="post" encType="multipart/form-data" className="inputFile">
-                <Form.Label 
-                  className="npy-path"
-                  htmlFor="file">
-                    {{
-                      npy: 'NPY dataset folder (MEDscan objects)',
-                      nifti: 'NIfTI dataset folder',
-                      dicom: 'DICOM dataset folder'
-                    }[useDatasetType]}
-                </Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-                  {{
-                    npy: 'Path to the folder containing the .npy files to check',
-                    nifti: 'Path to the folder containing the .nii files to check',
-                    dicom: 'Path to the folder containing the .dcm files to check'
-                  }[useDatasetType]}
-                </p>
-                <Form.Group controlId="enterFile">
-                  <Form.Control
-                    name="pathNpy"
-                    type="file"
-                    webkitdirectory="true"
-                    directory="true"
-                    onChange={handleDatasetFolderChange}
-                  />
-                </Form.Group>
-              </Form>
-            </Col>
+        {/* DATASET FOLDER*/}
+        <SectionCard
+          row
+          title={PRECHECK_DATASET[useDatasetType].label}
+          hint={PRECHECK_DATASET[useDatasetType].hint}
+          docHref={PRECHECK_DATASET[useDatasetType].doc}
+        >
+          <SourcePicker
+            mode={useWorkspacePC ? "workspace" : "local"}
+            kind="folder"
+            name="pathNpy"
+            options={listWSFolders}
+            value={selectedNpyFolder}
+            onPathChange={handleNpyFolderChange}
+          />
+        </SectionCard>
 
-            {/* UPLOAD SAVING FOLDER*/}
-            <Col style={{ width: "150px" }}>
-              <Form method="post" encType="multipart/form-data" className="inputFile">
-                <Form.Label 
-                  className="save-path"
-                  htmlFor="file">
-                    Save folder
-                </Form.Label>
-                <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-                  Path to the folder where the checked files will be saved
-                </p>
-                <Form.Group controlId="enterFile">
-                  <Form.Control
-                    name="pathSave"
-                    type="file"
-                    webkitdirectory="true"
-                    directory="true"
-                    onChange={handleChecksSaveFolderChange}
-                  />
-                </Form.Group>
-              </Form>
-            </Col>
-          </Row>   
-        )}
+        {/* UPLOAD SAVING FOLDER*/}
+        <SectionCard
+          row
+          title="Save results to"
+          hint="Folder where the pre-checks plots and JSON summaries are written."
+        >
+          <SourcePicker
+            mode={useWorkspacePC ? "workspace" : "local"}
+            kind="folder"
+            name="pathSave"
+            options={listWSFolders}
+            value={selectedSavePreChecksFolder}
+            onPathChange={setSelectedSavePreChecksFolder}
+          />
+        </SectionCard>
+
       
-      {/* WILD CARDS*/}
-      <Form>
-          <Row className="form-group-box">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', marginBottom: '4px' }}>
-              <div>{/* empty div for centering */}</div> 
-              <Form.Label 
-                className="checks-options" 
-                htmlFor="file"
-                style={{ margin: 0, textAlign: 'center' }} 
-              >
-                Pre-checks options
-              </Form.Label>
-              
-              <div style={{ display: 'flex', justifyContent: 'flex-start', paddingLeft: '12px' }}>
-                {isScanningNpyFolder && (
-                  <ProgressSpinner 
-                    style={{ width: '20px', height: '20px', margin: 0 }} 
-                    strokeWidth="6" 
-                    animationDuration=".5s" 
-                  />
-                )}
-              </div>
-            </div>
-            <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-              Options to select the scans to check (institutions, modalities, etc.). If empty, use a custom wildcard (e.g. 'STS*CECT*.npy')
-            </p>
-            <Col>
-              <MultiSelect 
-                value={selectedStudies} 
-                onChange={(e) => setSelectedStudies(e.value)} 
-                options={selectedPreChecksOptions === null ? [] : selectedPreChecksOptions.studies} 
-                optionLabel="label" 
-                display="chip"
-                placeholder="Select studies" 
-                className="w-full md:w-20rem" 
+          <SectionCard
+            row
+            title="Pre-checks options"
+            hint="Which scans to check, selected by study, institution and modality. If none are chosen, give a custom wildcard instead (for example STS*CECT*.npy)."
+            docHref={MEDIML_DOCS.preChecksParams}
+            headerEnd={
+              isScanningNpyFolder ? (
+                <ProgressSpinner
+                  style={{ width: "1rem", height: "1rem", margin: 0 }}
+                  strokeWidth="6"
+                  animationDuration=".5s"
+                  aria-label="Scanning the dataset folder"
+                />
+              ) : null
+            }
+          >
+            <MultiSelect
+              value={selectedStudies}
+              onChange={(e) => setSelectedStudies(e.value)}
+              options={selectedPreChecksOptions === null ? [] : selectedPreChecksOptions.studies}
+              optionLabel="label"
+              display="chip"
+              placeholder="Select studies"
+              aria-label="Studies"
+            />
+            <MultiSelect
+              value={selectedInstitutions}
+              onChange={(e) => setSelectedInstitutions(e.value)}
+              options={selectedPreChecksOptions === null ? [] : selectedPreChecksOptions.institutions}
+              optionLabel="label"
+              display="chip"
+              placeholder="Select institutions"
+              aria-label="Institutions"
+            />
+            <MultiSelect
+              value={selectedModalities}
+              onChange={(e) => setSelectedModalities(e.value)}
+              options={selectedPreChecksOptions === null ? [] : selectedPreChecksOptions.modalities}
+              optionLabel="label"
+              display="chip"
+              placeholder="Select Modalities"
+              aria-label="Modalities"
+            />
+            <InputText
+              placeholder="Custom wildcard (e.g., *CECT*)"
+              onChange={(e) => setCustomWildCard(e.target.value)}
+              aria-label="Custom wildcard"
+            />
+          </SectionCard>
+
+          <SectionCard
+            row
+            title="Check types"
+            hint="Which pre-checks to run. Voxel checks report the dimension ranges in the dataset; window checks report the intensity ranges. Both are on by default."
+          >
+            <Field leading label="Voxel checks (dimensions)" htmlFor="precheck-voxel">
+              <InputSwitch
+                inputId="precheck-voxel"
+                checked={runVoxelChecks}
+                onChange={(e) => setRunVoxelChecks(e.value)}
               />
-            </Col>
-            <Col>
-              <MultiSelect 
-                value={selectedInstitutions} 
-                onChange={(e) => setSelectedInstitutions(e.value)} 
-                options={selectedPreChecksOptions === null ? [] : selectedPreChecksOptions.institutions}
-                optionLabel="label" 
-                display="chip"
-                placeholder="Select institutions" 
-                className="w-full md:w-20rem" 
+            </Field>
+            <Field leading label="Window checks (intensity)" htmlFor="precheck-window">
+              <InputSwitch
+                inputId="precheck-window"
+                checked={runWindowChecks}
+                onChange={(e) => setRunWindowChecks(e.value)}
               />
-            </Col>
-            <Col>
-              <MultiSelect 
-                value={selectedModalities} 
-                onChange={(e) => setSelectedModalities(e.value)} 
-                options={selectedPreChecksOptions === null ? [] : selectedPreChecksOptions.modalities} 
-                optionLabel="label" 
-                display="chip"
-                placeholder="Select Modalities" 
-                className="w-full md:w-20rem" 
-              />
-            </Col>
-            <Col>
-              <InputText placeholder="Custom" onChange={(e) => setCustomWildCard(e.target.value)}/>
-            </Col>
-          </Row>
-          <Row className="form-group-box">
-            <Form.Label htmlFor="check-types">Check types</Form.Label>
-            <p style={{fontSize: "13px", fontStyle: "italic", fontWeight: "normal", margin: "0 0 8px 0"}}>
-              Choose which pre-checks to run. Both are enabled by default.
-            </p>
-            <Col md={12} style={{ display: "flex", justifyContent: "center", alignItems: "center", flexDirection: "column" }}>
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "36px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <InputSwitch
-                    checked={runVoxelChecks}
-                    onChange={(e) => setRunVoxelChecks(e.value)}
-                  />
-                  <span>Voxel checks (dimensions)</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <InputSwitch
-                    checked={runWindowChecks}
-                    onChange={(e) => setRunWindowChecks(e.value)}
-                  />
-                  <span>Window checks (intensity)</span>
-                </div>
-              </div>
-              {!runWindowChecks && !runVoxelChecks && (
-                <div style={{ display: "flex", alignItems: "center", gap: "12px", color: "red", margin: "12px" }}>
-                  <span><b>Warning:</b> No checks selected. Please enable at least one check type (voxel or window).</span>
-                </div>
-              )}
-            </Col>
-     
-          </Row>
-        </Form>
-      
+            </Field>
+            {!runWindowChecks && !runVoxelChecks && (
+              <ParamGrid.Full>
+                <Caption warn>
+                  <b>Warning:</b> No checks selected. Please enable at least one check type (voxel or window).
+                </Caption>
+              </ParamGrid.Full>
+            )}
+          </SectionCard>
+
       {/* RUN PRE-CHECKS BUTTON*/}
-      <Row className="form-group-box">
-        <Col>
-          <Button
-            severity="success"
-            label="RUN"
-            name="RunButton"
-            onClick={handlePreChecksRunClick}
-            disabled={
-              (!selectedCSVFile || refreshEnabledPreChecks) || 
-              (selectedModalities.length === 0 && selectedInstitutions.length === 0 && selectedStudies.length === 0 && !customWildCard) ||
-              (!runVoxelChecks && !runWindowChecks)}
-            icon="pi pi-play"
-            raised
-            rounded
-            loading={refreshEnabledPreChecks}
-          />
-        </Col>
-        <Col>
-          <Button
-            severity="secondary"
-            label="Show results"
-            name="ShowResultsButton"
-            onClick={() => {
-              setShowPreChecksImages(true)
-              setOpen(true)
-            }}
-            icon="pi pi-images"
-            raised
-            rounded
-          />
-        </Col>
-        </Row>
+      <Toolbar>
+        <Button
+          severity="success"
+          label="RUN"
+          name="RunButton"
+          onClick={handlePreChecksRunClick}
+          disabled={
+            refreshEnabledPreChecks ||
+            (selectedModalities.length === 0 && selectedInstitutions.length === 0 && selectedStudies.length === 0 && !customWildCard) ||
+            (!runVoxelChecks && !runWindowChecks)}
+          icon="pi pi-play"
+          raised
+          rounded
+          loading={refreshEnabledPreChecks}
+        />
+        <Button
+          severity="secondary"
+          label="Show results"
+          name="ShowResultsButton"
+          onClick={() => {
+            setShowPreChecksImages(true)
+            setOpen(true)
+          }}
+          icon="pi pi-images"
+          raised
+          rounded
+        />
+      </Toolbar>
       </Card.Body>
     </Card>
     

@@ -2,10 +2,10 @@ import { Button } from "primereact/button"
 import { Dropdown } from "primereact/dropdown"
 import { InputText } from "primereact/inputtext"
 import { Message } from "primereact/message"
-import React, { useContext, useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { Col, Row } from "react-bootstrap"
 import { getPathSeparator } from "../../utilities/fileManagementUtils"
-import { DataContext } from "../workspace/dataContext"
+import { useMEDDataStore } from "../workspace/useMEDData"
 
 /**
  * Component for saving datasets with options to set name, extension, and overwrite existing datasets.
@@ -35,7 +35,7 @@ const SaveDataset = ({
   pathToCheckInto = null
 }) => {
   const [nameAlreadyUsed, setNameAlreadyUsed] = useState(false) // True if the entered name for saving the dataset is already used
-  const { globalData } = useContext(DataContext) // The global data object
+  const medDataStore = useMEDDataStore() // stable handle - read fresh on demand, not subscribed to
 
   /**
    * To check if the name is already used
@@ -49,10 +49,10 @@ const SaveDataset = ({
       if (pathToCheckInto) {
         pathToCheck = pathToCheckInto + getPathSeparator() + name
       } else {
-        let newDatasetPathParent = globalData[selectedDataset.parentID].path
+        let newDatasetPathParent = medDataStore.get(selectedDataset.parentID)?.path
         pathToCheck = newDatasetPathParent + getPathSeparator() + name
       }
-      Object.entries(globalData).map((arr) => {
+      Object.entries(medDataStore.snapshot()).map((arr) => {
         if (arr[1].path === pathToCheck) {
           alreadyUsed = true
         }
@@ -61,10 +61,10 @@ const SaveDataset = ({
     setNameAlreadyUsed(alreadyUsed)
   }
 
-  /** Hook called when the global data changes */
+  /** Hook called when the dataset name changes */
   useEffect(() => {
     checkIfNameAlreadyUsed(`${showExtensions ? newDatasetName + "." + newDatasetExtension : newDatasetName}`)
-  }, [globalData, newDatasetName])
+  }, [newDatasetName])
 
   return (
     <>

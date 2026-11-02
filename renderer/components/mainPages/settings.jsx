@@ -11,8 +11,11 @@ import { InputText } from "primereact/inputtext"
 import { TabPanel, TabView } from "primereact/tabview"
 import { useCallback, useContext, useEffect, useRef, useState } from "react"
 import { Col } from "react-bootstrap"
+import { toast } from "react-toastify"
 import { requestBackend } from "../../utilities/requests"
+import { shareSettingsHealth } from "../../utilities/settingsHealth"
 import FirstSetupModal from "../generalPurpose/installation/firstSetupModal"
+import { resetConnection } from "../workspace/data/MongoConnection"
 import { WorkspaceContext } from "../workspace/workspaceContext"
 import ModulePage from "./moduleBasics/modulePage"
 
@@ -32,6 +35,7 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
   const [settings, setSettings] = useState(null)
   const [serverIsRunning, setServerIsRunning] = useState(false)
   const [mongoServerIsRunning, setMongoServerIsRunning] = useState(false)
+  const [isRestartingMongo, setIsRestartingMongo] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const [condaPath, setCondaPath] = useState("")
   const [seed, setSeed] = useState(54288)
@@ -39,6 +43,10 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
   const [pythonPackages, setPythonPackages] = useState(null)
   const [showPythonPackages, setShowPythonPackages] = useState(false)
   const [firstSetupModalVisible, setFirstSetupModalVisible] = useState(false)
+  const [missingRequirements, setMissingRequirements] = useState(null) // null until checked
+  const [requirementsCheckError, setRequirementsCheckError] = useState(null)
+  const [isCheckingRequirements, setIsCheckingRequirements] = useState(false)
+  const [isInstallingRequirements, setIsInstallingRequirements] = useState(false)
 
   const isMountedRef = useRef(true)
   const saveSettingsTimeoutRef = useRef(null)
@@ -55,6 +63,7 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
 
   const checkMongoIsRunning = useCallback(() => {
     ipcRenderer.invoke("checkMongoIsRunning").then((status) => {
+      shareSettingsHealth({ mongoServerIsRunning: !!status })
       if (!isMountedRef.current) return
       setMongoServerIsRunning((prev) => (prev === status ? prev : status))
     })
@@ -66,6 +75,7 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
       "get_server_health",
       { pageId: pageId },
       (data) => {
+        shareSettingsHealth({ serverIsRunning: !!data })
         if (!isMountedRef.current) return
         setServerIsRunning((prev) => {
           const next = !!data
@@ -73,6 +83,7 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
         })
       },
       () => {
+        shareSettingsHealth({ serverIsRunning: false })
         if (!isMountedRef.current) return
         setServerIsRunning((prev) => (prev ? false : prev))
       }
@@ -81,10 +92,11 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
 
   const checkBundledPython = useCallback(() => {
     ipcRenderer.invoke("getBundledPythonEnvironment").then((res) => {
+      shareSettingsHealth({ pythonPath: res || condaPath || "" })
       if (!isMountedRef.current) return
       setBundledPythonPath((prev) => (prev === res ? prev : res))
     })
-  }, [])
+  }, [condaPath])
 
   const loadPythonPackages = useCallback((pythonPath) => {
     if (!pythonPath) return
@@ -111,6 +123,17 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
     })
   }, [])
 
+  /**
+   * Get the settings from the main process
+   * if the conda path is defined in the settings, set it
+   * Check if the server is running and set the state
+   */
+  useEffect(() => {
+    if (bundledPythonPath && !condaPath) {
+      setCondaPath(bundledPythonPath)
+    }
+  }, [bundledPythonPath])
+
   useEffect(() => {
     if (!isActive) return
     checkMongoIsRunning()
@@ -124,6 +147,48 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
     },
     isActive ? 5000 : null
   )
+
+  const checkMissingRequirements = useCallback((pythonPath) => {
+    if (!pythonPath) return
+    setIsCheckingRequirements(true)
+    ipcRenderer
+      .invoke("getMissingPythonRequirements", pythonPath)
+      .then((missing) => {
+        shareSettingsHealth({ missingRequirements: missing.length })
+        if (!isMountedRef.current) return
+        setMissingRequirements(missing)
+        setRequirementsCheckError(null)
+      })
+      .catch((error) => {
+        if (!isMountedRef.current) return
+        setMissingRequirements(null)
+        setRequirementsCheckError(String(error?.message || error))
+      })
+      .finally(() => isMountedRef.current && setIsCheckingRequirements(false))
+  }, [])
+
+  const installMissingRequirements = () => {
+    setIsInstallingRequirements(true)
+    ipcRenderer
+      .invoke("installMissingPythonRequirements", bundledPythonPath, missingRequirements.map((r) => r.requirement))
+      .then(({ success, code }) => {
+        if (success) {
+          toast.success("Missing Python packages installed")
+        } else {
+          toast.error(`Package installation failed (pip exit code ${code}). See the notifications for pip's output.`)
+        }
+      })
+      .finally(() => {
+        if (!isMountedRef.current) return
+        setIsInstallingRequirements(false)
+        checkMissingRequirements(bundledPythonPath)
+        if (showPythonPackages) loadPythonPackages(bundledPythonPath)
+      })
+  }
+
+  useEffect(() => {
+    checkMissingRequirements(bundledPythonPath)
+  }, [bundledPythonPath, checkMissingRequirements])
 
   useEffect(() => {
     if (showPythonPackages && bundledPythonPath) {
@@ -169,6 +234,29 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
       console.error("Failed to start MongoDB: ", err)
     })
     console.log("Mongo result from start ", mongoResult)
+  }
+
+  /**
+   * Restart the MongoDB server and the app's connection to it, used when the connection
+   * is refused (ex: connect ECONNREFUSED 127.0.0.1:54017) although the server seems running
+   */
+  const restartMongo = async () => {
+    setIsRestartingMongo(true)
+    try {
+      // Forget the cached client so the next MongoDB call connects to the restarted server
+      await resetConnection()
+      const isRunning = await ipcRenderer.invoke("restartMongoDB")
+      if (isRunning) {
+        toast.success("MongoDB server restarted")
+      } else {
+        toast.error("MongoDB server could not be restarted. Make sure a workspace is open.")
+      }
+    } catch (error) {
+      toast.error(`Error while restarting the MongoDB server: ${error?.message || error}`)
+    } finally {
+      if (isMountedRef.current) setIsRestartingMongo(false)
+      checkMongoIsRunning()
+    }
   }
 
   const installMongoDB = () => {
@@ -259,6 +347,7 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
                       ipcRenderer.invoke("kill-server").then((stopped) => {
                         if (stopped) {
                           setServerIsRunning(false)
+                          shareSettingsHealth({ serverIsRunning: false })
                           console.log("server was stopped", stopped)
                         }
                       })
@@ -278,6 +367,7 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
                       value={condaPath}
                       onChange={(e) => {
                         setCondaPath(e.target.value)
+                        shareSettingsHealth({ pythonPath: bundledPythonPath || e.target.value || "" })
                         saveSettings({ ...settings, condaPath: e.target.value })
                       }}
                     />
@@ -285,6 +375,7 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
                       onClick={() => {
                         ipcRenderer.invoke("open-dialog-exe").then((selectedPath) => {
                           setCondaPath(selectedPath)
+                          shareSettingsHealth({ pythonPath: bundledPythonPath || selectedPath || "" })
                           saveSettings({ ...settings, condaPath: selectedPath })
                         })
                       }}
@@ -320,7 +411,17 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
                       startMongo()
                     }}
                     style={{ backgroundColor: mongoServerIsRunning ? "grey" : "#54a559", borderColor: mongoServerIsRunning ? "grey" : "#54a559", marginRight: "1rem" }}
-                    disabled={mongoServerIsRunning}
+                    disabled={mongoServerIsRunning || isRestartingMongo}
+                  />
+                  <Button
+                    label="Restart server"
+                    icon="pi pi-refresh"
+                    className="p-button-secondary"
+                    tooltip="Restart the MongoDB server and reconnect to it (ex: when the connection is refused)"
+                    onClick={restartMongo}
+                    loading={isRestartingMongo}
+                    disabled={isRestartingMongo}
+                    style={{ marginRight: "1rem" }}
                   />
                   {process.env.NODE_ENV === "development" && (
                     <>
@@ -363,6 +464,53 @@ const SettingsPage = ({ pageId = "settings", isActive = true }) => {
                   </Col>
                   {bundledPythonPath && typeof bundledPythonPath === "string" && <h6 style={{ marginTop: "0.5rem" }}>at {bundledPythonPath}</h6>}
                 </Col>
+                {bundledPythonPath && (
+                  <Col xs={12} md={12} className="d-flex flex-wrap align-items-center gap-3 mt-3">
+                    <h5 className="mb-0">Required packages :</h5>
+                    {isCheckingRequirements || isInstallingRequirements ? (
+                      <h5 className="mb-0 text-muted">{isInstallingRequirements ? "Installing..." : "Checking..."}</h5>
+                    ) : requirementsCheckError ? (
+                      <>
+                        <CircleX size="25" className="text-danger" />
+                        <h5 className="mb-0 text-danger">Could not check the requirements</h5>
+                      </>
+                    ) : missingRequirements?.length === 0 ? (
+                      <>
+                        <CircleCheckBig size="25" className="text-success" />
+                        <h5 className="mb-0">All requirements are met</h5>
+                      </>
+                    ) : missingRequirements ? (
+                      <>
+                        <CircleX size="25" className="text-danger" />
+                        <h5 className="mb-0 text-danger">
+                          {missingRequirements.length} missing or outdated package{missingRequirements.length > 1 ? "s" : ""}
+                        </h5>
+                      </>
+                    ) : null}
+                    <Button
+                      label="Check again"
+                      className="p-button-secondary p-button-outlined"
+                      onClick={() => checkMissingRequirements(bundledPythonPath)}
+                      disabled={isCheckingRequirements || isInstallingRequirements}
+                    />
+                    {missingRequirements?.length > 0 && (
+                      <Button
+                        label="Install missing packages"
+                        icon="pi pi-download"
+                        onClick={installMissingRequirements}
+                        disabled={isCheckingRequirements || isInstallingRequirements}
+                        loading={isInstallingRequirements}
+                      />
+                    )}
+                  </Col>
+                )}
+                {requirementsCheckError && <small className="d-block mt-2 text-danger">{requirementsCheckError}</small>}
+                {missingRequirements?.length > 0 && (
+                  <DataTable value={missingRequirements} size="small" className="mt-3">
+                    <Column field="requirement" header="Required" />
+                    <Column header="Installed" body={(row) => row.installed || "Not installed"} />
+                  </DataTable>
+                )}
                 {showPythonPackages && (
                   <DataTable value={pythonPackages} size="small" scrollable scrollHeight="25rem" style={{ marginTop: "1rem" }}>
                     <Column field="name" header="Name" />

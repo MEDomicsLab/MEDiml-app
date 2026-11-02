@@ -1,14 +1,17 @@
 import { randomUUID } from "crypto"
-import { ipcRenderer } from "electron"
 import fs from "fs-extra"
 import path from "path"
 import { toast } from "react-toastify"
 import { getPathSeparator } from "../../utilities/fileManagementUtils"
+import { medDataStore } from "./medDataStore"
+import { getDb } from "./data/MongoConnection"
 import {
+  addChildToParent,
   deleteMEDDataObject,
   downloadCollectionToFile,
   insertMEDDataObjectIfNotExists,
   overwriteMEDDataObjectProperties,
+  removeChildFromParent,
   updateMEDDataObjectName,
   updateMEDDataObjectPath
 } from "../mongoDB/mongoDBUtils"
@@ -296,9 +299,11 @@ export class MEDDataObject {
    * @param {Object} dict - dictionary of all MEDDataObjects
    * @param {Object} copiedObject - the MEDDataObject to copy
    * @param {Object} placeToCopy - the target MEDDataObject where the copied object will be placed
+   * @param {Boolean} isRoot - internal: true for the top-level call, false for the recursive
+   *   descendant calls, so a folder copy triggers one workspace refresh instead of one per node
    * @returns {Promise<void>}
    */
-  static async copyMedDataObject(dict, copiedObject, placeToCopy) {
+  static async copyMedDataObject(dict, copiedObject, placeToCopy, isRoot = true) {
     if (placeToCopy.type !== "directory") {
       throw new Error("Target object must be a directory")
     }
@@ -326,12 +331,14 @@ export class MEDDataObject {
     for (const childId of copiedObject.childrenIDs) {
       const childObject = dict[childId]
       if (childObject) {
-        await this.copyMedDataObject(dict, childObject, newObject)
+        await this.copyMedDataObject(dict, childObject, newObject, false)
       }
     }
 
-    // Save the updated dictionary
-    this.updateWorkspaceDataObject()
+    // Save the updated dictionary - only once, for the whole copy, not once per descendant
+    if (isRoot) {
+      this.updateWorkspaceDataObject()
+    }
   }
 
   /**
@@ -406,20 +413,21 @@ export class MEDDataObject {
 
     const uniqueName = this.getUniqueNameForCopy(dict, newName, object.parentID)
 
-    // Update the dictionary with the new name
-    const succeed = await updateMEDDataObjectName(id, newName)
+    // Update the database with the (possibly de-duplicated) name. Using uniqueName here - not the
+    // raw newName - keeps the DB name and the on-disk name (renamed below) from diverging when
+    // there's a collision.
+    const succeed = await updateMEDDataObjectName(id, uniqueName)
 
     if (!succeed) {
       console.log("Failed to rename MEDDataObject")
       return
     }
 
-    // Update the local filesystem if the object is in workspace
+    // Update the local filesystem if the object is in workspace. Computed from the OLD name
+    // before the in-memory record is touched below.
     if (object.inWorkspace) {
       const oldPath = this.getFullPath(dict, id, workspacePath)
-      object.name = uniqueName
-      const newPath = this.getFullPath(dict, id, workspacePath)
-      object.path = newPath
+      const newPath = path.join(path.dirname(oldPath), uniqueName)
       const success = await updateMEDDataObjectPath(id, newPath)
       if (!success) {
         console.error(`Failed to update path for MEDDataObject with id ${id}`)
@@ -428,7 +436,15 @@ export class MEDDataObject {
       }
       fs.renameSync(oldPath, newPath)
       console.log(`Renamed ${oldPath} to ${newPath}`)
+      object.path = newPath
     }
+
+    // Update the in-memory name unconditionally - this must happen for MongoDB-only objects too
+    // (inWorkspace === false), not just ones with a local file. Previously this line lived inside
+    // the `if (object.inWorkspace)` block above, so renaming a Mongo-only object updated the
+    // database but never the in-memory record, and the UI only caught up once some unrelated
+    // local-file rename happened to trigger a full workspace resync from Mongo.
+    object.name = uniqueName
 
     // Notify the system to update the workspace
     this.updateWorkspaceDataObject()
@@ -627,21 +643,21 @@ export class MEDDataObject {
     } else {
       console.error(`Failed to move MEDDataObject with id ${id} to new parent with id ${newParentID}, failed to update path or parentID`)
     }
-    // Remove the data object from the old parent's children IDs
+    // Remove the data object from the old parent's children IDs. $pull/$addToSet are atomic
+    // single-field updates - no more reading the whole array, mutating it in memory, and writing
+    // it back (which could also clobber a concurrent sibling change).
     const oldParent = dict[oldParentID]
     if (oldParent) {
       oldParent.childrenIDs = oldParent.childrenIDs.filter((id) => id !== dataObject.id)
     }
-    // Update the old parent ID in the DB
-    const successOldParent = await overwriteMEDDataObjectProperties(oldParentID, { childrenIDs: oldParent.childrenIDs })
+    const successOldParent = await removeChildFromParent(oldParentID, dataObject.id)
     if (!successOldParent) {
       console.error(`Failed to update old parent with id ${oldParentID}`)
     }
 
     // Add the data object to the new parent's children IDs
     newParent.childrenIDs.push(dataObject.id)
-    // Update the new parent ID in the DB
-    const successNewParent = await overwriteMEDDataObjectProperties(newParentID, { childrenIDs: newParent.childrenIDs })
+    const successNewParent = await addChildToParent(newParentID, dataObject.id)
     if (!successNewParent) {
       console.error(`Failed to update the children of new parent with id ${newParentID}`)
     }
@@ -650,9 +666,42 @@ export class MEDDataObject {
   }
 
   /**
-   * @description Updates the workspace data object.
+   * @description Notifies the app that workspace data changed. touchAll() immediately re-renders
+   * consumers of objects that were patched in place (rename/move/lock/...); the DB reload then
+   * brings in objects that exist only in MongoDB so far (e.g. freshly created scenes, which have
+   * no files on disk for the workspace watcher to pick up).
    */
   static updateWorkspaceDataObject() {
-    ipcRenderer.send("messageFromNext", "updateWorkingDirectory")
+    medDataStore.touchAll()
+    reloadStoreFromDb()
   }
+}
+
+let reloadInFlight = null
+let reloadQueued = false
+
+// Coalesces bursts of calls (scene creation fires several) into at most one extra DB read.
+function reloadStoreFromDb() {
+  if (reloadInFlight) {
+    reloadQueued = true
+    return reloadInFlight
+  }
+  reloadInFlight = (async () => {
+    try {
+      const db = await getDb()
+      const docs = await db.collection("medDataObjects").find({}).toArray()
+      const dict = {}
+      for (const doc of docs) dict[doc.id] = new MEDDataObject(doc)
+      medDataStore.reconcile(dict)
+    } catch (err) {
+      console.error("Failed to reload workspace data from the database:", err)
+    } finally {
+      reloadInFlight = null
+      if (reloadQueued) {
+        reloadQueued = false
+        reloadStoreFromDb()
+      }
+    }
+  })()
+  return reloadInFlight
 }

@@ -1,0 +1,64 @@
+name: Bug report
+description: Something in MEDiml-app does not work as expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please do not attach patient data or any identifiable information.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the problem, and what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The exact steps, including the page (e.g. DataManager, Batch Extractor) and the settings used.
+      placeholder: |
+        1. Open the Batch Extractor
+        2. Select a NIfTI dataset folder
+        3. Click RUN
+        4. See error
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error messages or logs
+      description: Any error message shown by the app, or the console output when running from source.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: MEDiml-app version
+      placeholder: e.g. 0.0.1, or the commit hash when running from source
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - Ubuntu / Linux
+        - macOS
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How do you run the app?
+      options:
+        - Installer from the releases page
+        - From source (npm run dev)
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Dataset details
+      description: Format (DICOM, NIfTI, NPY), modality (CT, MR, PET, RTDOSE) and approximate number of scans, if relevant.
