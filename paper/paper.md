@@ -157,7 +157,7 @@ Table: ***MEDiml*'s Radiomics Analysis Results.** AUC: area under the receiver o
 | Non-small cell lung cancer (NSCLC) | Histological subtype | 0.76 \newline [0.71, 0.80] | 0.73 | 0.71 | Intensity features |
 | Low-grade glioma | IDH1 mutation | 0.68 \newline [0.60, 0.75] | 0.68 | 0.69 | Morphological features |
 | Meningioma | Pathological tumor grade | 0.65 \newline [0.59, 0.72] | 0.64 | 0.62 | Morphological features |
-| Renal cell carcinoma (RCC) - CECT | Subtype discrimination | 0.82 \newline [0.76, 0.88] | 0.77 | 0.78 | Intensity features |
+| Renal cell carcinoma - CECT | Subtype discrimination | 0.82 \newline [0.76, 0.88] | 0.77 | 0.78 | Intensity features |
 | Renal cell carcinoma - MRI | Subtype discrimination | 0.72 \newline [0.68, 0.77] | 0.71 | 0.65 | Texture features |
 
 These studies demonstrated the utility of *MEDiml*'s complexity-minimization framework, emphasizing simpler and interpretable models. For example, in MRI-based RCC subtype classification, texture features were selected as the optimal complexity level (Figure \ref{fig:importance_tree}A), and the Explanation Tree traced their contribution down to individual features (Figure \ref{fig:importance_tree}B).
