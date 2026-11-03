@@ -1,7 +1,4 @@
-<img src="MEDimlLogo.png" width="100" align="right" align="top" >
-<br />
-
-# MEDiml: MEDical Image analysis with Machine Learning | The application
+# <img src="MEDimlLogo.png" width="80" align="right" alt="MEDiml logo"> MEDiml: MEDical Image analysis with Machine Learning | The application
 
 <p align="center">
   <a href="https://medomicslab.gitbook.io/mediml-app-docs"><picture><source media="(prefers-color-scheme: dark)" srcset="resources/readme/gitbook-dark.svg"><img src="resources/readme/gitbook-light.svg" width="20" height="20" alt="GitBook" align="absmiddle"></picture>&nbsp;Documentation</a>
