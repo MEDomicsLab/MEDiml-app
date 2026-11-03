@@ -4,11 +4,11 @@
 # MEDiml: MEDical Image analysis with Machine Learning | The application
 
 <p align="center">
-  <a href="https://medomicslab.gitbook.io/mediml-app-docs">📖&nbsp;Documentation</a>
+  <a href="https://medomicslab.gitbook.io/mediml-app-docs"><picture><source media="(prefers-color-scheme: dark)" srcset="resources/readme/gitbook-dark.svg"><img src="resources/readme/gitbook-light.svg" width="20" height="20" alt="GitBook" align="absmiddle"></picture>&nbsp;Documentation</a>
   &nbsp;&nbsp;·&nbsp;&nbsp;
-  <a href="https://mediml.app">🌐&nbsp;MEDiml.app</a>
+  <a href="https://mediml.app"><picture><source media="(prefers-color-scheme: dark)" srcset="resources/readme/globe-dark.svg"><img src="resources/readme/globe-light.svg" width="20" height="20" alt="Website" align="absmiddle"></picture>&nbsp;MEDiml.app</a>
   &nbsp;&nbsp;·&nbsp;&nbsp;
-  <a href="https://github.com/MEDomicsLab/MEDiml-pkg/">📦&nbsp;MEDiml-pkg</a>
+  <a href="https://github.com/MEDomicsLab/MEDiml-pkg/"><picture><source media="(prefers-color-scheme: dark)" srcset="resources/readme/python-dark.svg"><img src="resources/readme/python-light.svg" width="20" height="20" alt="Python" align="absmiddle"></picture>&nbsp;MEDiml-pkg</a>
 </p>
 
 MEDiml-app is a desktop application for extracting radiomics and dosiomics features from medical images without writing code. It provides a graphical user interface to the [MEDiml Python package](https://github.com/MEDomicsLab/MEDiml-pkg) and is part of the [MEDomics](https://github.com/MEDomicsLab/MEDomics) project.
@@ -74,6 +74,12 @@ npm run dev
 **Python environment:** on first launch, the setup dialog installs Python 3.9 and the packages listed in [`pythonEnv/requirements.txt`](pythonEnv/requirements.txt) (MEDiml included) into a `python/` folder in the repository, as well as MongoDB. If `~/.mediml/python` already exists, for example from an installed copy of the app, it is used instead.
 
 To build the installers yourself, run `npm run build:win`, `npm run build:linux` or `npm run build:mac` on the matching operating system. The files are written to `build/dist/`.
+
+## Proof of concept
+
+New to MEDiml-app? Follow the [Soft-Tissue Sarcoma proof of concept](https://medomicslab.gitbook.io/mediml-app-docs/soft-tissue-sarcoma-poc), an easy-to-follow guide to get familiar with the app. It walks through a full radiomics study for the early evaluation of lung metastasis risk, from feature extraction to model training and evaluation.
+
+Its imaging data (PET, T1, T2FS and CT scans for each patient, derived from a public TCIA cohort) is published on [Zenodo](https://zenodo.org/records/23103630). You can download it from the app's home page, straight into your workspace under `DATA/STS_POC`.
 
 ## Documentation
 
