@@ -3,6 +3,14 @@
 
 # MEDiml: MEDical Image analysis with Machine Learning | The application
 
+<p align="center">
+  <a href="https://medomicslab.gitbook.io/mediml-app-docs">📖&nbsp;Documentation</a>
+  &nbsp;&nbsp;·&nbsp;&nbsp;
+  <a href="https://mediml.app">🌐&nbsp;MEDiml.app</a>
+  &nbsp;&nbsp;·&nbsp;&nbsp;
+  <a href="https://github.com/MEDomicsLab/MEDiml-pkg/">📦&nbsp;MEDiml-pkg</a>
+</p>
+
 MEDiml-app is a desktop application for extracting radiomics and dosiomics features from medical images without writing code. It provides a graphical user interface to the [MEDiml Python package](https://github.com/MEDomicsLab/MEDiml-pkg) and is part of the [MEDomics](https://github.com/MEDomicsLab/MEDomics) project.
 
 ## Statement of need
@@ -80,6 +88,22 @@ To build the installers yourself, run `npm run build:win`, `npm run build:linux`
 ## Contributing
 
 Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and our [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Citation
+If you use MEDiml in your research, please cite it using:
+
+```bibtex
+@misc{loutfi2026mediml,
+  title         = {Medical Image Analysis with Machine Learning ({MEDiml}): Strategies for Simpler Radiomics},
+  author        = {Ait Lhaj Loutfi, Mahdi and others},
+  year          = {2026},
+  eprint        = {2610.37715},
+  archiveprefix = {arXiv},
+  doi           = {10.48550/arXiv.2610.37715}
+}
+```
+
+The full reference manual of MEDiml is available on [arXiv](https://arxiv.org/abs/2610.29666).
 
 ## License
 
