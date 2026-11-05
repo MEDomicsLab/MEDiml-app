@@ -151,9 +151,7 @@ export function getBundledPythonEnvironment() {
   let pythonEnvironment = null
 
   let bundledPythonPath = null
-
-  // Check if the python path can be found in the .mediml directory
-  let medomicsDirExists = fs.existsSync(path.join(app.getPath("home"), ".mediml", "python"))
+  const pythonExecutableName = process.platform == "win32" ? "python.exe" : path.join("bin", "python")
 
   if (process.env.NODE_ENV === "production") {
     // Get the user path followed by .mediml
@@ -174,17 +172,17 @@ export function getBundledPythonEnvironment() {
 
     bundledPythonPath = path.join(userPath, ".mediml", "python")
   } else {
-    if (medomicsDirExists) {
-      bundledPythonPath = path.join(getHomePath(), ".mediml", "python")
+    // In development the installer uses <repo>/python. ~/.mediml/python is only used when it holds an executable:
+    // a failed production install leaves it empty, which made Python undetected after a successful dev install
+    const homePythonPath = path.join(getHomePath(), ".mediml", "python")
+    if (fs.existsSync(path.join(homePythonPath, pythonExecutableName))) {
+      bundledPythonPath = homePythonPath
     } else {
       bundledPythonPath = path.join(process.cwd(), "python")
     }
   }
 
-  pythonEnvironment = path.join(bundledPythonPath, "bin", "python")
-  if (process.platform == "win32") {
-    pythonEnvironment = path.join(bundledPythonPath, "python.exe")
-  }
+  pythonEnvironment = path.join(bundledPythonPath, pythonExecutableName)
   if (!fs.existsSync(pythonEnvironment)) {
     pythonEnvironment = null
   }

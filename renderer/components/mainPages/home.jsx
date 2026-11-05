@@ -187,11 +187,16 @@ const HomePage = () => {
   useEffect(() => {
     ipcRenderer.invoke("checkRequirements").then((data) => {
       console.log("Requirements: ", data)
-      if (data.pythonInstalled && data.mongoDBInstalled && data.pythonRequirementsMet) {
+      // Missing Python packages don't require the first setup, they can be installed from the settings page
+      if (data.pythonInstalled && data.mongoDBInstalled) {
         setRequirementsMet(true)
       } else {
         setRequirementsMet(false)
       }
+    }).catch((error) => {
+      // The requirements could not be checked: show the setup rather than run the app without them
+      console.error("Could not check the requirements: ", error)
+      setRequirementsMet(false)
     })
   }, [])
 
