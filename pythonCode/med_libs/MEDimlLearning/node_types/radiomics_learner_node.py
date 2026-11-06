@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+import os
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +16,12 @@ from ..node import LearningNode
 # Model names used by older workflows, mapped to their PyCaret model IDs
 LEGACY_MODEL_IDS = {"XGBoost": "xgboost"}
 
+# Share of the given patients PyCaret trains on (setup's train_size, the rest is its own test set), and the
+# number of internal cross-validation folds MEDiml uses by default
+PYCARET_TRAIN_SIZE = 0.7
+DEFAULT_INTERNAL_CV_FOLDS = 5
+MIN_INTERNAL_CV_FOLDS = 2
+
 
 def resolve_learner_settings(settings: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     """Returns the PyCaret model ID (or 'best') and its parameters.
@@ -27,8 +35,68 @@ def resolve_learner_settings(settings: dict[str, Any]) -> tuple[str, dict[str, A
     return LEGACY_MODEL_IDS.get(model_name, model_name), model_settings
 
 
-def build_ml_config(algorithm: str, model_settings: dict[str, Any]) -> dict[str, Any]:
-    """Builds the MEDiml Estimator ml_config from the node parameters."""
+def get_internal_cv_folds(outcome_table_binary_train: pd.DataFrame) -> int:
+    """Returns the number of internal cross-validation folds PyCaret can use with these training patients.
+
+    PyCaret trains on 70% of the patients (stratified by outcome) and cross-validates them in 5 folds, which fails
+    for every model when that 70% holds fewer than 5 patients (fewer than 8 patients in all). In that case only, the
+    folds are reduced to what the smallest outcome class allows, so that the other experiments keep their 5 folds.
+
+    Raises:
+        ValueError: If there are too few patients, or a single outcome class, to train and cross-validate a model.
+    """
+    outcome = outcome_table_binary_train.iloc[:, 0]
+    class_counts = outcome.value_counts()
+    n_patients = len(outcome)
+    advice = ("Check that the features files of the Data node and the outcome table hold the same patients "
+              "(same IDs), and the split settings.")
+
+    if n_patients == 0:
+        raise ValueError(f"Learning: no training patients are left to train the model. {advice}")
+    counts_text = ", ".join(f"{count} with outcome {label}" for label, count in class_counts.sort_index().items())
+    if len(class_counts) < 2:
+        raise ValueError(f"Learning: the {n_patients} training patients all have the same outcome ({counts_text}), "
+                         f"a model needs both outcomes to be trained. {advice}")
+    # PyCaret's stratified train/test split needs at least 2 patients of each outcome
+    if class_counts.min() < 2:
+        raise ValueError(f"Learning: too few training patients ({n_patients}: {counts_text}), at least 2 patients "
+                         f"of each outcome are needed. {advice}")
+
+    n_train = math.floor(PYCARET_TRAIN_SIZE * n_patients)
+    if n_train >= DEFAULT_INTERNAL_CV_FOLDS:
+        return DEFAULT_INTERNAL_CV_FOLDS
+    # Lower bound of the smallest outcome class in PyCaret's stratified training set, each fold needs one of each
+    smallest_class_train = min(math.floor(n_train * count / n_patients) for count in class_counts)
+    folds = min(n_train, smallest_class_train)
+    if folds < MIN_INTERNAL_CV_FOLDS:
+        raise ValueError(f"Learning: too few training patients ({n_patients}: {counts_text}). PyCaret trains on "
+                         f"{round(PYCARET_TRAIN_SIZE * 100)}% of them ({n_train} patients), which is not enough for "
+                         f"a {MIN_INTERNAL_CV_FOLDS}-fold cross-validation with each outcome in every fold. {advice}")
+    print(f"Learning: only {n_patients} training patients, the internal cross-validation uses {folds} folds "
+          f"instead of {DEFAULT_INTERNAL_CV_FOLDS}")
+    return folds
+
+
+def fit_estimator(estimator: Any, var_table_train: pd.DataFrame, outcome_table_binary_train: pd.DataFrame) -> None:
+    """Fits the MEDiml estimator, with a clear error when PyCaret could not train any model.
+
+    With the 'best' model, PyCaret's compare_models skips every model that fails (its errors are only written to
+    PyCaret's log) and returns an empty list if they all failed, which tune_model then rejects with an unclear
+    "Estimator [] does not have the required fit() method" error.
+    """
+    try:
+        estimator.fit(var_table_train, outcome_table_binary_train)
+    except ValueError as error:
+        if "does not have the required fit() method" not in str(error):
+            raise
+        path_log = os.path.abspath(os.getenv("PYCARET_CUSTOM_LOGGING_PATH", "logs.log"))
+        raise RuntimeError(f"Learning: none of the models compared by PyCaret could be trained "
+                           f"({len(var_table_train)} training patients). The error of each model is written "
+                           f"in PyCaret's log: {path_log}") from error
+
+
+def build_ml_config(algorithm: str, model_settings: dict[str, Any], internal_cv_folds: int | None = None) -> dict[str, Any]:
+    """Builds the MEDiml Estimator ml_config from the node parameters (and the internal CV folds, if given)."""
     ml_config = {
         "n_features_to_select": model_settings["nFeaturesToSelect"],
         "optimize_threshold": model_settings.get("optimizeThreshold", True),
@@ -37,6 +105,8 @@ def build_ml_config(algorithm: str, model_settings: dict[str, Any]) -> dict[str,
         "use_gpu": model_settings.get("useGPU", model_settings.get("use_gpu", True)),
         "seed": model_settings["seed"],
     }
+    if internal_cv_folds is not None:
+        ml_config["internal_cv_folds"] = internal_cv_folds
     if algorithm == "best":
         # PyCaret rejects include and exclude together, and treats an empty list differently from None
         ml_config["best_include"] = list(model_settings.get("bestInclude") or []) or None
@@ -116,9 +186,9 @@ class RadiomicsLearnerNode(LearningNode):
 
         estimator = MEDiml.learning.Estimator.Estimator(
             algorithm=algorithm,
-            ml_config=build_ml_config(algorithm, model_settings),
+            ml_config=build_ml_config(algorithm, model_settings, get_internal_cv_folds(context.outcome_table_binary_train)),
         )
-        estimator.fit(var_table_train, context.outcome_table_binary_train)
+        fit_estimator(estimator, var_table_train, context.outcome_table_binary_train)
 
         name_save_model = model_settings["nameSave"]
         model_id = f"{name_save_model}_var1"
@@ -176,9 +246,9 @@ class RadiomicsLearnerNode(LearningNode):
 
         estimator = MEDiml.learning.Estimator.Estimator(
             algorithm=algorithm,
-            ml_config=build_ml_config(algorithm, model_settings),
+            ml_config=build_ml_config(algorithm, model_settings, get_internal_cv_folds(context.outcome_table_binary_train)),
         )
-        estimator.fit(var_table_train, context.outcome_table_binary_train)
+        fit_estimator(estimator, var_table_train, context.outcome_table_binary_train)
 
         model_id = f"{model_settings['nameSave']}_FINAL"
         path_model = path_learn / f"{model_id}.pickle"
