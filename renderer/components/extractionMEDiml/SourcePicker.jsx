@@ -1,7 +1,9 @@
 import { ipcRenderer } from "electron"
 import { Dropdown } from "primereact/dropdown"
-import { useId } from "react"
+import { useContext, useId, useMemo } from "react"
 import { Button, Form, InputGroup } from "react-bootstrap"
+import PathOption, { getPathLocation } from "../primitives/PathOption"
+import { WorkspaceContext } from "../workspace/workspaceContext"
 
 /**
  * Picks a folder or file either from the workspace or from disk.
@@ -10,7 +12,8 @@ import { Button, Form, InputGroup } from "react-bootstrap"
  * @param {"folder"|"file"} kind Folder picker (native dialog) or file picker.
  * @param {string} accept File-type filter, local + kind="file" only.
  * @param {string} name Form control name, kept for the existing handlers.
- * @param {Array} options Workspace entries, `{name, value}`.
+ * @param {Array} options Workspace entries, `{name, value}`. Each is shown with its location in the
+ *   workspace under its name, so entries sharing a name (e.g. two "CT" folders) can be told apart.
  * @param {string} value Current path (workspace mode, and local folders).
  * @param {Function} onPathChange Receives the selected path string: workspace
  *   entries, and local folders.
@@ -39,18 +42,32 @@ const SourcePicker = ({
   ...rest
 }) => {
   const controlId = useId()
+  const { workspace } = useContext(WorkspaceContext)
+  const workspacePath = workspace?.workingDirectory?.path
+
+  // The location of each entry, sorted by it so entries sharing a name are listed by where they are
+  const optionsWithLocation = useMemo(
+    () =>
+      options
+        .map((option) => ({ ...option, location: getPathLocation(option.value, workspacePath) }))
+        .sort((a, b) => a.location.localeCompare(b.location)),
+    [options, workspacePath]
+  )
 
   if (mode === "workspace") {
     return (
       <>
         <Dropdown
           filter
+          // The filter also matches the location, to find an entry by its folder
+          filterBy="name,location"
           showClear={showClear}
           value={value}
           onChange={(e) => onPathChange(e.value || "")}
-          options={options}
+          options={optionsWithLocation}
           optionLabel="name"
-          display="chip"
+          itemTemplate={PathOption}
+          valueTemplate={(option, props) => (option ? PathOption(option) : props.placeholder)}
           placeholder={placeholder}
           {...rest}
         />

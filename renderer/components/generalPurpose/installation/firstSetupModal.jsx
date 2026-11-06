@@ -24,30 +24,31 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
   const [clicked, setClicked] = useState(false)
   const [installErrors, setInstallErrors] = useState([]) // Errors of the installations that failed, the setup can be retried
 
-  const checkPython = () => {
-    ipcRenderer.invoke("getBundledPythonEnvironment").then((data) => {
-      if (data) {
-        ipcRenderer.invoke("checkPythonRequirements").then((data) => {
-          console.log("Python requirements: ", data)
-          if (data) {
-            setPythonIsInstalled(true)
-            setPythonInstallationProgress(100)
-          }
-        })
-      }
-    })
-  }
-
-  const checkMongoDB = () => {
-    ipcRenderer.invoke("checkMongoDBisInstalled").then((data) => {
-      console.log("MongoDB is installed: ", data)
-      if (data !== null) {
-        setMongoDBIsInstalled(true)
-        setMongoDBInstallationProgress(100)
-      } else {
-        setMongoDBIsInstalled(false)
-      }
-    })
+  /**
+   * Checks the requirements, updating the progress bars of the installed ones
+   */
+  const checkRequirements = () => {
+    setCheckIsRunning(true)
+    ipcRenderer
+      .invoke("checkRequirements")
+      .then((data) => {
+        console.log("Requirements: ", data)
+        // Missing Python packages are not required here, they can be installed from the settings page
+        if (data.pythonInstalled) {
+          setPythonIsInstalled(true)
+          setPythonInstallationProgress(100)
+        }
+        if (data.mongoDBInstalled) {
+          setMongoDBIsInstalled(true)
+          setMongoDBInstallationProgress(100)
+        }
+        if (data.mongoDBInstalled && data.pythonInstalled) {
+          console.log("REQUIREMENTS MET")
+          setLocalRequirementsMet(true)
+        }
+      })
+      .catch((error) => console.error("Could not check the requirements: ", error))
+      .finally(() => setCheckIsRunning(false))
   }
 
   /**
@@ -86,7 +87,9 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
   const startSetup = () => {
     setClicked(true)
     setInstallErrors([])
-    const installations = [installPython()]
+    // An installed Python is skipped: its missing packages, if any, are installed from the settings page
+    const installations = []
+    if (!pythonIsInstalled) installations.push(installPython())
     if (!mongoDBIsInstalled) installations.push(installMongoDB())
     // Allow the setup to be started again once every installation is over, to retry the failed ones
     Promise.all(installations).finally(() => setClicked(false))
@@ -108,11 +111,6 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
       onHide()
     }
   }
-
-  useEffect(() => {
-    checkMongoDB()
-    checkPython()
-  }, [])
 
   useEffect(() => {
     console.log("FirstSetupModal pythonNotifications: ", pythonNotifications)
@@ -187,8 +185,8 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
       }
     }
 
-    if (!pythonIsInstalled || pythonIsInstalling) {
-      setPythonIsInstalling(true)
+    // Only while Python is being installed: otherwise any notification (ex: MongoDB's) reset the bar of an installed Python
+    if (pythonIsInstalling && !pythonIsInstalled) {
       let totalMessages = 0
       let numberOfPythonSteps = 5
       for (let notification in newPythonNotifications) {
@@ -220,34 +218,25 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
 
   /**
    * Timer to check the requirements
-   * @returns
-   * @summary This function is used to check the requirements every 5 seconds
-   *         If the requirements are met, the function stops
-   *         If the requirements are not met, the function continues
+   * @summary Checks the requirements now and then every 5 seconds, while the modal is visible and until they are met.
+   *          The check spawns Python, so it must not run while the modal is hidden (it stays mounted in the settings page)
    */
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCheckIsRunning(true)
-      ipcRenderer.invoke("checkRequirements").then((data) => {
-        console.log("Requirements: ", data)
-        setCheckIsRunning(false)
-        // checkRequirements also checks the Python packages, as an installed Python without them can't run the app
-        if (data.pythonInstalled && data.pythonRequirementsMet) {
-          setPythonIsInstalled(true)
-          setPythonInstallationProgress(100)
-        }
-        if (data.mongoDBInstalled) {
-          setMongoDBIsInstalled(true)
-          setMongoDBInstallationProgress(100)
-        }
-        if (data.mongoDBInstalled && data.pythonInstalled && data.pythonRequirementsMet) {
-          console.log("REQUIREMENTS MET")
-          setLocalRequirementsMet(true)
-        }
-      })
-    }, 5000)
+    if (!visible || localRequirementsMet) return
+    checkRequirements()
+    const interval = setInterval(checkRequirements, 5000)
     return () => clearInterval(interval)
-  }, [])
+  }, [visible, localRequirementsMet])
+
+  /**
+   * Opened because the requirements were not met (setRequirementsMet given, from the home page):
+   * closed by itself once they are, after the setup is over
+   */
+  useEffect(() => {
+    if (visible && localRequirementsMet && !clicked && typeof setRequirementsMet === "function") {
+      closeFirstSetupModal()
+    }
+  }, [visible, localRequirementsMet, clicked])
 
   return (
     <Dialog header="Application first setup" visible={visible} onHide={onHide} style={{ width: "50vw" }} closable={closable}>
