@@ -93,6 +93,7 @@ const HomePage = () => {
   const [pocPresent, setPocPresent] = useState({}) // POC variants already present in the workspace, by pocSize
   const [manualDownloadOpen, setManualDownloadOpen] = useState(false) // Manual download instructions, opened when a download fails
   const pocPollRef = useRef(null)
+  const scrollContainerRef = useRef(null)
   const workspacePath = workspace.workingDirectory?.path
 
   async function handleWorkspaceChange() {
@@ -105,6 +106,15 @@ const HomePage = () => {
   }
 
   useEffect(() => stopPocPolling, [])
+
+  // Scroll fix
+  useEffect(() => {
+    const element = scrollContainerRef.current
+    if (!element) return
+    const stopWheelPropagation = (event) => event.stopPropagation()
+    element.addEventListener("wheel", stopWheelPropagation, { passive: true })
+    return () => element.removeEventListener("wheel", stopWheelPropagation)
+  }, [])
 
   // Load the POC variants already present in the current workspace
   useEffect(() => {
@@ -187,11 +197,16 @@ const HomePage = () => {
   useEffect(() => {
     ipcRenderer.invoke("checkRequirements").then((data) => {
       console.log("Requirements: ", data)
-      if (data.pythonInstalled && data.mongoDBInstalled && data.pythonRequirementsMet) {
+      // Missing Python packages don't require the first setup, they can be installed from the settings page
+      if (data.pythonInstalled && data.mongoDBInstalled) {
         setRequirementsMet(true)
       } else {
         setRequirementsMet(false)
       }
+    }).catch((error) => {
+      // The requirements could not be checked: show the setup rather than run the app without them
+      console.error("Could not check the requirements: ", error)
+      setRequirementsMet(false)
     })
   }, [])
 
@@ -218,7 +233,8 @@ const HomePage = () => {
 
   return (
     <>
-      <div 
+      <div
+        ref={scrollContainerRef}
         className="container"
         style={{
           paddingTop: "1rem",
@@ -226,6 +242,9 @@ const HomePage = () => {
           flexDirection: "column",
           maxHeight: "100%",
           overflowY: "auto",
+          // Home is the placeholder of empty tabsets, whose flex container centers it and has no definite height:
+          // maxHeight 100% is ignored there, stretching gives it the tabset's height so it scrolls instead of being clipped
+          alignSelf: "stretch",
           scrollbarColor: "#b0b0b0 #f5f5f5"
         }}
       >

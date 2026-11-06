@@ -1,7 +1,7 @@
 import { app } from "electron"
 import fs from "fs"
 import { getMongoDBPath, mainWindow } from "../background"
-import { checkPythonRequirements, execCallbacksForChildWithNotifications, getBundledPythonEnvironment, isAppleSilicon, runInstallationStep } from "../utils/pythonEnv"
+import { execCallbacksForChildWithNotifications, getBundledPythonEnvironment, isAppleSilicon, runInstallationStep } from "../utils/pythonEnv"
 
 //**** LOG ****// This is used to send the console.log messages to the main window
 const originalConsoleLog = console.log
@@ -36,13 +36,9 @@ export const checkRequirements = async () => {
   let mongoDBInstalled = getMongoDBPath()
   let pythonInstalled = getBundledPythonEnvironment()
 
-  // An installed Python is not enough, the app needs its packages (they are missing when their installation failed)
-  let pythonRequirementsMet = pythonInstalled !== null && checkPythonRequirements(pythonInstalled)
-
   console.log("MongoDB installed: " + mongoDBInstalled)
   console.log("Python installed: " + pythonInstalled)
-  console.log("Python requirements met: " + pythonRequirementsMet)
-  return { pythonInstalled: pythonInstalled, mongoDBInstalled: mongoDBInstalled, pythonRequirementsMet: pythonRequirementsMet }
+  return { pythonInstalled, mongoDBInstalled }
 }
 
 export const installMongoDB = async () => {

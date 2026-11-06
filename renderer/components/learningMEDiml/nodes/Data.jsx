@@ -1,35 +1,14 @@
 import { Dropdown } from "primereact/dropdown"
 import { MultiSelect } from 'primereact/multiselect'
-import React, { useContext, useEffect, useState } from "react"
+import { useContext, useEffect, useState } from "react"
 import { Alert, Col, Form, Row } from "react-bootstrap"
 import { toast } from 'react-toastify'
 import Node, { updateHasWarning } from "../../flow/node"
+import Caption from '../../primitives/Caption'
+import PathOption, { getPathLocation } from '../../primitives/PathOption'
+import { sectionCardClass } from '../../primitives/SectionCard'
 import { useMEDDataObjectsByType, useMEDDataStore } from "../../workspace/useMEDData"
 import { WorkspaceContext } from "../../workspace/workspaceContext"
-import { set } from "lodash"
-import Caption from '../../primitives/Caption'
-import { sectionCardClass } from '../../primitives/SectionCard'
-import styles from "./Data.module.css"
-
-/**
- * @param {string} folderPath Full path of a folder
- * @param {string} workspacePath Full path of the workspace
- * @returns {string} The folder path relative to the workspace (e.g. /DATA/STS_POC/Features/CT), or the
- *   full path if the folder is outside the workspace
- */
-const getFolderLocation = (folderPath, workspacePath) => {
-  const location = (folderPath || "").replace(/\\/g, "/")
-  const root = (workspacePath || "").replace(/\\/g, "/").replace(/\/+$/, "")
-  return root && location.toLowerCase().startsWith(root.toLowerCase() + "/") ? location.slice(root.length) : location
-}
-
-/** Folder name with its location underneath, so folders sharing a name can be told apart. */
-const folderOptionTemplate = (option) => (
-  <div className={styles.folderOption}>
-    <span>{option.name}</span>
-    <span className={styles.folderPath}>{option.location}</span>
-  </div>
-)
 
 /**
  * @param {string} id id of the node
@@ -87,7 +66,7 @@ const Data = ({ id, data, type }) => {
           wsFolders.push({
             name: globalData[key].name,
             value: globalData[key].path,
-            location: getFolderLocation(globalData[key].path, workspace?.workingDirectory?.path)
+            location: getPathLocation(globalData[key].path, workspace?.workingDirectory?.path)
           })
         }
       })
@@ -185,8 +164,8 @@ const Data = ({ id, data, type }) => {
                   onChange={(e) => handleSaveFolderChange(e.value)}
                   options={listWSFolders}
                   optionLabel="name"
-                  itemTemplate={folderOptionTemplate}
-                  valueTemplate={(option, props) => (option ? folderOptionTemplate(option) : props.placeholder)}
+                  itemTemplate={PathOption}
+                  valueTemplate={(option, props) => (option ? PathOption(option) : props.placeholder)}
                   placeholder="Select a folder"
                 />
               </Col>
