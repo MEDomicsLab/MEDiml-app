@@ -1,22 +1,57 @@
-# <img src=".github/assets/readme/mediml-logo.svg" width="80" height="80" align="right" alt="MEDiml logo"> MEDiml: MEDical Image analysis with Machine Learning | The application
-
 <p align="center">
-  <a href="https://medomicslab.gitbook.io/mediml-app-docs"><img src=".github/assets/readme/book-open.svg" width="20" height="20" alt="" align="absmiddle">&nbsp;Documentation</a>
-  &nbsp;&nbsp;—&nbsp;&nbsp;
-  <a href="https://mediml.app"><img src=".github/assets/readme/app-window.svg" width="20" height="20" alt="" align="absmiddle">&nbsp;Website</a>
-  &nbsp;&nbsp;—&nbsp;&nbsp;
-  <a href="https://arxiv.org/abs/2610.37715"><img src=".github/assets/readme/joss.svg" width="20" alt="" align="absmiddle">&nbsp;Paper&nbsp;(Submitted)</a>
-  &nbsp;&nbsp;—&nbsp;&nbsp;
-  <a href="https://arxiv.org/abs/2610.29666"><img src=".github/assets/readme/arxiv.svg" width="20" height="20" alt="" align="absmiddle">&nbsp;Reference&nbsp;Manual</a>
+  <a href="https://mediml.app">
+    <img src=".github/assets/readme/MEDiml_Header.png" width="100%" alt="MEDiml: Medical Image Analysis with Machine Learning / The Application">
+  </a>
 </p>
 
+<p align="center"><strong>A desktop application for radiomics and dosiomics feature extraction.</strong></p>
+
 <p align="center">
-  <a href="https://github.com/MEDomicsLab/MEDiml-app/releases/latest"><img src="https://img.shields.io/github/v/release/MEDomicsLab/MEDiml-app?style=for-the-badge&amp;logo=github&amp;logoColor=white&amp;label=Release&amp;color=007EC6" alt="Latest release"></a>
-  <a href="https://github.com/MEDomicsLab/MEDiml-app/actions/workflows/automaticBuilding.yml"><img src="https://img.shields.io/github/actions/workflow/status/MEDomicsLab/MEDiml-app/automaticBuilding.yml?style=for-the-badge&amp;logo=githubactions&amp;logoColor=white&amp;label=Build" alt="Application build status"></a>
-  <br>
-  <a href="#supported-operating-systems"><img src="https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux-007EC6?style=for-the-badge" alt="Platforms: Windows, macOS and Linux"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-007EC6?style=for-the-badge" alt="License: GPLv3"></a>
+  <a href="https://github.com/MEDomicsLab/MEDiml-app/releases"><img src="https://img.shields.io/github/v/release/MEDomicsLab/MEDiml-app" alt="Release"></a>
+  <a href="https://github.com/MEDomicsLab/MEDiml-app/actions/workflows/automaticBuilding.yml"><img src="https://img.shields.io/github/actions/workflow/status/MEDomicsLab/MEDiml-app/automaticBuilding.yml?label=build" alt="Build"></a>
+  <a href="#supported-operating-systems"><img src="https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-blue" alt="Platforms"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/MEDomicsLab/MEDiml-app" alt="License"></a>
 </p>
+
+<!-- Equal insets center the borderless links and demo as a group on desktop. -->
+<div>
+  <picture>
+    <source media="(min-width: 1150px)" srcset=".github/assets/readme/layout-spacer.svg" width="15%" height="204">
+    <source media="(min-width: 850px)" srcset=".github/assets/readme/layout-spacer.svg" width="8%" height="204">
+    <img src=".github/assets/readme/layout-spacer.svg" align="left" width="0" height="0" alt="">
+  </picture>
+  <picture>
+    <source media="(min-width: 1150px)" srcset=".github/assets/readme/layout-spacer.svg" width="15%" height="204">
+    <source media="(min-width: 850px)" srcset=".github/assets/readme/layout-spacer.svg" width="8%" height="204">
+    <img src=".github/assets/readme/layout-spacer.svg" align="right" width="0" height="0" alt="">
+  </picture>
+  <a href=".github/assets/readme/mediml_gui.gif">
+    <picture>
+      <source media="(min-width: 1150px)" srcset=".github/assets/readme/mediml_gui.gif" width="41%">
+      <source media="(min-width: 850px)" srcset=".github/assets/readme/mediml_gui.gif" width="43%">
+      <img src=".github/assets/readme/mediml_gui.gif" align="right" width="48%" alt="Animated demo of the MEDiml-app interface">
+    </picture>
+  </a>
+  <br><br>
+</div>
+
+<p>
+  <picture><img src=".github/assets/readme/book-open.svg" width="20" height="20" alt="" align="absmiddle"></picture>&nbsp;&nbsp;&nbsp;<a href="https://medomicslab.gitbook.io/mediml-app-docs">Documentation</a>
+</p>
+
+<p>
+  <picture><img src=".github/assets/readme/app-window.svg" width="20" height="20" alt="" align="absmiddle"></picture>&nbsp;&nbsp;&nbsp;<a href="https://mediml.app">Website</a>
+</p>
+
+<p>
+  <picture><img src=".github/assets/readme/joss.svg" width="20" height="20" alt="" align="absmiddle"></picture>&nbsp;&nbsp;&nbsp;<a href="https://arxiv.org/abs/2610.37715">Paper&nbsp;(Submitted)</a>
+</p>
+
+<p>
+  <picture><img src=".github/assets/readme/arxiv.svg" width="20" height="20" alt="" align="absmiddle"></picture>&nbsp;&nbsp;&nbsp;<a href="https://arxiv.org/abs/2610.29666">Reference&nbsp;Manual</a>
+</p>
+
+<br clear="all">
 
 ## <a id="table-of-contents"></a><img src=".github/assets/readme/list-tree.svg" width="28" height="28" alt="" align="absmiddle"> Table of Contents
   * [Introduction](#introduction)
@@ -30,18 +65,48 @@
 
 ## <a id="introduction"></a><img src=".github/assets/readme/compass.svg" width="28" height="28" alt="" align="absmiddle"> Introduction
 
-MEDiml-app is a desktop application for extracting radiomics and dosiomics features from medical images without writing code. It provides a graphical user interface to the [MEDiml Python package](https://github.com/MEDomicsLab/MEDiml-pkg) and is part of the [MEDomics](https://github.com/MEDomicsLab/MEDomics) project.
+MEDiml-app puts the [MEDiml Python package](https://github.com/MEDomicsLab/MEDiml-pkg) behind an interactive interface: the whole radiomics pipeline, from raw medical images to predictive models, runs from a single desktop app.
 
 Radiomics turns medical images (CT, MR, PET, radiotherapy dose maps) into quantitative features that can feed predictive models of diagnosis, treatment response or outcome. Computing these features reproducibly is hard: the results depend on many preprocessing choices (voxel size, re-segmentation range, discretisation, filters), and the standardized tools that implement them, such as MEDiml, which follows the [Image Biomarker Standardisation Initiative (IBSI)](https://theibsi.github.io/), are programming libraries.
 
 Many of the people who need radiomics features, such as clinicians, medical physicists and clinical researchers, do not program. MEDiml-app closes that gap. It lets them:
 
-- Convert DICOM/NIfTI datasets to MEDiml format and validate them.
-- Use ready-to-use, editable and validated extraction settings.
-- Extract radiomics and dosiomics features across a dataset.
-- Save results with their settings for reporting and reproducibility.
-- Apply machine learning models to extracted features.
-- Design and run workflows tailored to each study.
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <img src=".github/assets/readme/file-input.svg" width="24" height="24" alt=""><br>
+      <b>Convert data</b><br>
+      Convert DICOM/NIfTI datasets to MEDiml format and validate them.
+    </td>
+    <td width="33%" valign="top">
+      <img src=".github/assets/readme/sliders-horizontal.svg" width="24" height="24" alt=""><br>
+      <b>Configure settings</b><br>
+      Use ready-to-use, editable and validated extraction settings.
+    </td>
+    <td width="33%" valign="top">
+      <img src=".github/assets/readme/scan-search.svg" width="24" height="24" alt=""><br>
+      <b>Extract features</b><br>
+      Extract radiomics and dosiomics features across a dataset.
+    </td>
+  </tr>
+  <tr>
+    <td width="33%" valign="top">
+      <img src=".github/assets/readme/save.svg" width="24" height="24" alt=""><br>
+      <b>Save results</b><br>
+      Save results with their settings for reporting and reproducibility.
+    </td>
+    <td width="33%" valign="top">
+      <img src=".github/assets/readme/chart-line.svg" width="24" height="24" alt=""><br>
+      <b>Build models</b><br>
+      Apply machine learning models to extracted features.
+    </td>
+    <td width="33%" valign="top">
+      <img src=".github/assets/readme/workflow.svg" width="24" height="24" alt=""><br>
+      <b>Design workflows</b><br>
+      Design and run workflows tailored to each study.
+    </td>
+  </tr>
+</table>
 
 > [!TIP]
 > It also gives researchers who do program a fast way to prototype MEDiml settings before scripting them.
