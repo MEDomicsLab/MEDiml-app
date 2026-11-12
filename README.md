@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://mediml.app">
-    <img src=".github/assets/readme/MEDiml_Header.png" width="100%" alt="MEDiml: Medical Image Analysis with Machine Learning / The Application">
+    <img src=".github/assets/readme/MEDiml_Header.png" width="100%" alt="MEDical Image analysis with Machine Learning (MEDiml) / The Application">
   </a>
 </p>
 
@@ -187,7 +187,7 @@ If you use MEDiml in your research, please cite it using:
 
 ```bibtex
 @misc{loutfi2026mediml,
-  title         = {Medical Image Analysis with Machine Learning ({MEDiml}): Strategies for Simpler Radiomics},
+  title         = {{MEDical Image analysis with Machine Learning (MEDiml)}: Strategies for Simpler Radiomics},
   author        = {Ait Lhaj Loutfi, Mahdi and others},
   year          = {2026},
   eprint        = {2610.37715},
