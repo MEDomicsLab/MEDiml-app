@@ -4,7 +4,7 @@
   </a>
 </p>
 
-<p align="center"><strong>A desktop application for radiomics and dosiomics feature extraction.</strong></p>
+<p align="center"><strong>A desktop application for radiomics analysis.</strong></p>
 
 <p align="center">
   <a href="https://github.com/MEDomicsLab/MEDiml-app/releases"><img src="https://img.shields.io/github/v/release/MEDomicsLab/MEDiml-app" alt="Release"></a>
