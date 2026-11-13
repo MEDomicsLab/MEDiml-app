@@ -7,12 +7,12 @@ import { TreeTable } from 'primereact/treetable'
 import React, { useContext, useEffect, useRef, useState } from 'react'
 import { Alert, Card, Form, ProgressBar } from 'react-bootstrap'
 import { toast } from 'react-toastify'
+import { getDefaultExtractionSettings, sameSettings } from "../../utilities/medimlDefaultSettings"
 import MEDIML_DOCS from '../../utilities/medimlDocs'
 import { requestBackend } from "../../utilities/requests"
 import DosiomicsDoc, { DOSIOMICS_DOC_TITLE } from "../docs/DosiomicsDoc"
 import InputDataDoc, { INPUT_DATA_DOC_TITLE } from "../docs/InputDataDoc"
 import RoiCsvDoc, { ROI_CSV_DOC_TITLE } from "../docs/RoiCsvDoc"
-import { getDefaultExtractionSettings, sameSettings } from "../../utilities/medimlDefaultSettings"
 import DocLink from '../extractionMEDiml/docLink'
 import ExtractionSettingsCard, { defaultSettingsSource } from '../extractionMEDiml/ExtractionSettingsCard'
 import SourcePicker from '../extractionMEDiml/SourcePicker'
@@ -549,7 +549,7 @@ const BatchExtractor = ({ pageId, configPath = "" }) => {
       >
         <SelectButton
           value={useDatasetType}
-          onChange={(e) => setUseDatasetType(e.value)}
+          onChange={(e) => { if (e.value) setUseDatasetType(e.value) }}
           optionLabel="label"
           options={[
             { label: 'DICOM', value: "dicom" },

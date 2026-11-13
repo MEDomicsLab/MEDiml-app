@@ -951,7 +951,7 @@ const DataManager = ({ pageId, configPath = "" }) => {
         >
           <SelectButton
             value={useDatasetType}
-            onChange={(e) => setUseDatasetType(e.value)}
+            onChange={(e) => { if (e.value) setUseDatasetType(e.value) }}
             optionLabel="label"
             options={[
               { label: 'DICOM', value: "dicom" },
