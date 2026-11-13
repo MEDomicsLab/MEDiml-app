@@ -6,9 +6,8 @@ import { DataTable } from 'primereact/datatable'
 import { Image } from 'primereact/image'
 import { Message } from 'primereact/message'
 import { Panel } from 'primereact/panel'
-import { Splitter, SplitterPanel } from 'primereact/splitter'
 import { useContext, useEffect, useRef, useState } from "react"
-import { Col, Row } from "react-bootstrap"
+import { Col } from "react-bootstrap"
 import Card from "react-bootstrap/Card"
 import { toast } from "react-toastify"
 import Lightbox from "yet-another-react-lightbox"
@@ -65,7 +64,6 @@ const ResultsPaneMEDiml = () => {
   flowContentRef.current = flowContent
   const [expNames, setExpNames] = useState([])
   const [compareMode, setCompareMode] = useState(false)
-  const [showMetrics, setShowMetrics] = useState(true)
   const [histogramImages, setHistogramImages] = useState([])
   const [heatMap, setHeatMap] = useState()
   const [treePlot, setTreePlot] = useState("")
@@ -576,7 +574,7 @@ const ResultsPaneMEDiml = () => {
       
       // Display the metrics in a table
       return <>
-      {(showMetrics) && (<Card className="text-center">
+      <Card className="text-center">
         <Card.Title>Metrics</Card.Title>
         {keysList.map((item, key) => {
           return (
@@ -591,7 +589,7 @@ const ResultsPaneMEDiml = () => {
           </Accordion>
           );
         })}
-      </Card>)}
+      </Card>
 
       {/*Figures*/}
       <Card className="text-center">
@@ -600,13 +598,13 @@ const ResultsPaneMEDiml = () => {
             <AccordionTab disabled={!isResults} key={`AccordionTab-Figures`} header={"Compare Analysis Plots"}>
               {histogramImages.length > 0 ? 
                 (<Panel header="Feature Importance" toggleable>
-                    <Splitter >
+                    <div className="d-flex flex-nowrap overflow-auto gap-3 pb-2">
                       {histogramImages.map((image, index) => (
-                        <SplitterPanel key={index}>
-                          <Image key={index} src={histogramImages[index]} alt="Image" width="300" preview/>
-                        </SplitterPanel>
+                        <div key={index} className="flex-shrink-0">
+                          <Image src={image} alt={`Feature importance ${index + 1}`} width="300" preview/>
+                        </div>
                       ))}
-                    </Splitter>
+                    </div>
                 </Panel>) : (
                 <Panel header="Tree Plot" toggleable>
                   <div style={{ color: 'red' }}>No feature importance histogram generated.</div>
@@ -748,20 +746,6 @@ const ResultsPaneMEDiml = () => {
             </div>
           </Card.Header>
           <Card.Body>
-            {/*Button to toggle metrics*/}
-            {(compareMode) && (
-              <Row className="form-group-box justify-content-center">
-                <Button
-                  label={showMetrics?  ("Hide Metrics") : ("Show Metrics")}
-                  severity={showMetrics? ("info") : ("success")}
-                  rounded
-                  raised
-                  icon={showMetrics? ("pi pi-eye-slash") : ("pi pi-eye")}
-                  onClick={() => setShowMetrics(!showMetrics)}
-                  style={{ width: 'fit-content', margin: 'auto' }}
-                />
-              </Row>
-            )}
             {compareMode ? (renderAccordionCompared(selectedResults, isResults)) : (renderAccordions(selectedResults, isResults))}
             {/*Zoomable view of the clicked analysis plot*/}
             <Lightbox
