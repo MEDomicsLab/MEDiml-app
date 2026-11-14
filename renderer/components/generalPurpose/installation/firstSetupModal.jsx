@@ -1,9 +1,9 @@
-import { Dialog } from "primereact/dialog"
-import React, { useState, useContext, useEffect } from "react"
-import { NotificationContext } from "../notificationContext"
 import { ipcRenderer } from "electron"
-import { ProgressBar } from "primereact/progressbar"
 import { Button } from 'primereact/button'
+import { Dialog } from "primereact/dialog"
+import { ProgressBar } from "primereact/progressbar"
+import { useContext, useEffect, useRef, useState } from "react"
+import { NotificationContext } from "../notificationContext"
 
 /**
  *
@@ -23,6 +23,7 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
   const [localRequirementsMet, setLocalRequirementsMet] = useState(false)
   const [clicked, setClicked] = useState(false)
   const [installErrors, setInstallErrors] = useState([]) // Errors of the installations that failed, the setup can be retried
+  const pythonInstallPendingRef = useRef(false)
 
   /**
    * Checks the requirements, updating the progress bars of the installed ones
@@ -34,7 +35,8 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
       .then((data) => {
         console.log("Requirements: ", data)
         // Missing Python packages are not required here, they can be installed from the settings page
-        if (data.pythonInstalled) {
+        const pythonInstalled = data.pythonInstalled && !pythonInstallPendingRef.current
+        if (pythonInstalled) {
           setPythonIsInstalled(true)
           setPythonInstallationProgress(100)
         }
@@ -42,7 +44,7 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
           setMongoDBIsInstalled(true)
           setMongoDBInstallationProgress(100)
         }
-        if (data.mongoDBInstalled && data.pythonInstalled) {
+        if (data.mongoDBInstalled && pythonInstalled) {
           console.log("REQUIREMENTS MET")
           setLocalRequirementsMet(true)
         }
@@ -63,16 +65,33 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
   }
 
   const installPython = () => {
+    pythonInstallPendingRef.current = true
     setPythonIsInstalling(true)
+    setPythonInstallationProgress(0)
     return ipcRenderer
       .invoke("installBundledPythonExecutable")
       .then((data) => {
         console.log("Python installation: ", data)
-        if (data === false) reportInstallError("Python", "the Python executable was not found after the installation")
+        if (data === false) {
+          reportInstallError("Python", "the Python executable was not found after the installation")
+        } else {
+          // Python and all its packages are installed: the check can now mark it installed
+          pythonInstallPendingRef.current = false
+          checkRequirements()
+        }
       })
       .catch((error) => reportInstallError("Python", error))
       .finally(() => setPythonIsInstalling(false))
   }
+
+  /**
+   * Progress of the Python installation (0 to 100), sent by the main process at each step and each package
+   */
+  useEffect(() => {
+    const onPythonInstallationProgress = (event, progress) => setPythonInstallationProgress(progress)
+    ipcRenderer.on("pythonInstallationProgress", onPythonInstallationProgress)
+    return () => ipcRenderer.removeListener("pythonInstallationProgress", onPythonInstallationProgress)
+  }, [])
 
   const installMongoDB = () => {
     return ipcRenderer
@@ -123,10 +142,8 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
   useEffect(() => {
     console.log("FirstSetupModal notifications: ", notifications)
 
-    // Count the number of Python notifications and calculate the progress
-    let accumulatedPythonProgress = 0
+    // Count the MongoDB steps done to calculate its progress
     let accumulatedMongoDBProgress = 0
-    let totalNumberOfPythonNotifications = 6857
 
     let newPythonNotifications = { ...pythonNotifications }
     let newMongoDBNotifications = { ...mongoDBNotifications }
@@ -185,33 +202,7 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
       }
     }
 
-    // Only while Python is being installed: otherwise any notification (ex: MongoDB's) reset the bar of an installed Python
-    if (pythonIsInstalling && !pythonIsInstalled) {
-      let totalMessages = 0
-      let numberOfPythonSteps = 5
-      for (let notification in newPythonNotifications) {
-        let pythonNotification = newPythonNotifications[notification]
-        totalMessages += pythonNotification.messagesCount
-        if (pythonNotification.done) {
-          accumulatedPythonProgress += 1
-        }
-      }
-      if (accumulatedPythonProgress == numberOfPythonSteps) {
-        setPythonInstallationProgress(100)
-      } else {
-        let progress = -2 + (totalMessages / totalNumberOfPythonNotifications) * 100
-
-        if (progress >= 100) {
-          progress = 99.9
-        }
-        if (progress < 0) {
-          progress = 0
-        }
-
-        setPythonInstallationProgress(progress.toFixed(1))
-      }
-      console.log("Total messages: ", totalMessages)
-    }
+    // The Python progress is not estimated from its notifications: the main process sends it (pythonInstallationProgress)
     setPythonNotifications(newPythonNotifications)
     setMongoDBNotifications(newMongoDBNotifications)
   }, [notifications])
@@ -271,7 +262,7 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
           <ProgressBar
             value={pythonInstallationProgress}
             displayValueTemplate={() => `${pythonInstallationProgress}%`}
-            mode={checkIsRunning ? "indeterminate" : "determinate"}
+            mode={checkIsRunning && !pythonIsInstalling ? "indeterminate" : "determinate"}
             color={pythonInstallationProgress == 100 && pythonIsInstalled ? "#22c55e" : ""}
           />
         </div>

@@ -196,7 +196,50 @@ export function getRequirementsFilePath() {
 }
 
 export async function installRequiredPythonPackages(mainWindow) {
-  await installPythonPackage(mainWindow, getBundledPythonEnvironment(), null, getRequirementsFilePath())
+  await installPythonPackage(mainWindow, getBundledPythonEnvironment(), null, getRequirementsFilePath(), (fraction) => sendPythonInstallationProgress(mainWindow, 99 * fraction))
+  sendPythonInstallationProgress(mainWindow, 100)
+}
+
+/**
+ * @description Sends the progress of the Python installation (0 to 100) to the first setup modal
+ */
+function sendPythonInstallationProgress(mainWindow, progress) {
+  mainWindow.webContents.send("pythonInstallationProgress", Math.round(Math.min(100, Math.max(0, progress)) * 10) / 10)
+}
+
+// pip's package name normalization (PEP 503), to match the names of its output against the ones of its report
+const normalizePackageName = (name) => name.toLowerCase().replace(/[-_.]+/g, "-")
+
+/**
+ * @returns {Function} A stdout "data" listener calling `onLine` with each complete, trimmed line of the output
+ */
+function lineListener(onLine) {
+  let pending = ""
+  return (data) => {
+    const lines = (pending + data).split(/\r?\n/)
+    pending = lines.pop()
+    lines.forEach((line) => onLine(line.trim()))
+  }
+}
+
+/**
+ * @description Resolves the requirements without installing them (pip --dry-run), to know every package
+ *              (dependencies included) the installation will collect and track its progress package by package
+ * @returns {Promise<Set<String>>} The normalized names of the packages to install, empty if they could not be resolved
+ */
+async function getPackagesToInstall(pythonPath, requirementsFilePath, mainWindow) {
+  const reportPath = path.join(os.tmpdir(), `mediml-pip-report-${Date.now()}.json`)
+  try {
+    await runInstallationStep(`"${pythonPath}" -m pip install --dry-run --ignore-installed --report "${reportPath}" -r "${requirementsFilePath}"`, "Python Package Resolution", mainWindow)
+    const report = JSON.parse(fs.readFileSync(reportPath, "utf8"))
+    return new Set(report.install.map((item) => normalizePackageName(item.metadata.name)))
+  } catch (error) {
+    // Only the progress tracking is lost, the installation itself still runs
+    console.warn("Could not resolve the python packages to install:", error)
+    return new Set()
+  } finally {
+    fs.rmSync(reportPath, { force: true })
+  }
 }
 
 // Runs inside the target Python so specifiers (>=, <, ~=, markers) are evaluated by pip's own
@@ -287,14 +330,34 @@ export function getInstalledPythonPackages(pythonPath = null) {
   return pythonPackages
 }
 
-export async function installPythonPackage(mainWindow, pythonPath, packageName = null, requirementsFilePath = null) {
+/**
+ * @param {Function} onProgress Called with the progress of the installation, from 0 to 1
+ */
+export async function installPythonPackage(mainWindow, pythonPath, packageName = null, requirementsFilePath = null, onProgress = () => {}) {
   console.log("Installing python package: ", packageName, requirementsFilePath, " with pythonPath: ", pythonPath)
+  onProgress(0)
   await runInstallationStep(`"${pythonPath}" -m pip install --upgrade pip`, "Python pip Upgrade", mainWindow)
+  onProgress(0.05)
   if (requirementsFilePath !== null) {
-    await runInstallationStep(`"${pythonPath}" -m pip install -r "${requirementsFilePath}"`, "Python Package Installation from requirements", mainWindow)
+    const packagesToInstall = await getPackagesToInstall(pythonPath, requirementsFilePath, mainWindow)
+    onProgress(0.15)
+    // pip prints one of these lines for each package it handles: 15% to 90% advances package by package,
+    // then the installation of the collected packages (silent) runs until pip exits
+    const collectedPackages = new Set()
+    const onLine = (line) => {
+      const match = line.match(/^(?:Collecting|Requirement already satisfied:)\s+([A-Za-z0-9][A-Za-z0-9._-]*)/)
+      if (match && packagesToInstall.has(normalizePackageName(match[1]))) {
+        collectedPackages.add(normalizePackageName(match[1]))
+        onProgress(0.15 + (0.75 * collectedPackages.size) / packagesToInstall.size)
+      } else if (line.startsWith("Installing collected packages")) {
+        onProgress(0.9)
+      }
+    }
+    await runInstallationStep(`"${pythonPath}" -m pip install -r "${requirementsFilePath}"`, "Python Package Installation from requirements", mainWindow, lineListener(onLine))
   } else {
     await runInstallationStep(`"${pythonPath}" -m pip install ${packageName}`, "Python Package Installation", mainWindow)
   }
+  onProgress(1)
 }
 
 export function execCallbacksForChildWithNotifications(child, id, mainWindow) {
@@ -356,7 +419,10 @@ export async function installBundledPythonExecutable(mainWindow) {
   } else {
     pythonExecutablePath = path.join(bundledPythonPath, "bin", "python")
   }
+  // Progress of the steps: download 0-20%, extraction 20-30%, packages 30-99%, 100% once Python is verified
+  const onPackagesProgress = (fraction) => sendPythonInstallationProgress(mainWindow, 30 + 69 * fraction)
   if (!fs.existsSync(pythonExecutablePath)) {
+    sendPythonInstallationProgress(mainWindow, 0)
     // If the python executable is not installed, download the python executable
     if (process.platform == "win32") {
       // Download the python executable
@@ -368,14 +434,16 @@ export async function installBundledPythonExecutable(mainWindow) {
       execCallbacksForChildWithNotifications(downloadPromise.child, "Python Downloading", mainWindow)
 
       const { stdout, stderr } = await downloadPromise
+      sendPythonInstallationProgress(mainWindow, 20)
       let extractCommand = `tar -xvf ${outputFileName} ${pythonParentFolderExtractString}`
       let extractionPromise = exec(extractCommand, { shell: "powershell.exe" })
       execCallbacksForChildWithNotifications(extractionPromise.child, "Python Exec. Extracting", mainWindow)
 
       const { stdout: extrac, stderr: extracErr } = await extractionPromise
+      sendPythonInstallationProgress(mainWindow, 30)
 
       // Install the required python packages
-      await installPythonPackage(mainWindow, pythonExecutablePath, null, getRequirementsFilePath())
+      await installPythonPackage(mainWindow, pythonExecutablePath, null, getRequirementsFilePath(), onPackagesProgress)
       let removeCommand = `rm ${outputFileName}`
       let removePromise = exec(removeCommand, { shell: "powershell.exe" })
       execCallbacksForChildWithNotifications(removePromise.child, "Python Exec. Removing", mainWindow)
@@ -396,17 +464,21 @@ export async function installBundledPythonExecutable(mainWindow) {
       const extractFolder = path.dirname(bundledPythonPath)
 
       await runInstallationStep(`curl -fSL --retry 3 -o "${archivePath}" "${url}"`, "Python Downloading", mainWindow)
+      sendPythonInstallationProgress(mainWindow, 20)
       await runInstallationStep(`tar -xzf "${archivePath}" -C "${extractFolder}"`, "Python Exec. Extracting", mainWindow)
       await runInstallationStep(`rm -f "${archivePath}"`, "Python Exec. Removing", mainWindow)
+      sendPythonInstallationProgress(mainWindow, 30)
 
       if (!fs.existsSync(pythonExecutablePath)) {
         throw new Error(`Python was extracted but its executable was not found at ${pythonExecutablePath}`)
       }
       // Install the required python packages
-      await installPythonPackage(mainWindow, pythonExecutablePath, null, getRequirementsFilePath())
+      await installPythonPackage(mainWindow, pythonExecutablePath, null, getRequirementsFilePath(), onPackagesProgress)
     }
   }
-  return getBundledPythonEnvironment() !== null
+  const installed = getBundledPythonEnvironment() !== null
+  if (installed) sendPythonInstallationProgress(mainWindow, 100)
+  return installed
 }
 
 /**
@@ -414,12 +486,14 @@ export async function installBundledPythonExecutable(mainWindow) {
  * @param {String} command The shell command to run
  * @param {String} id The notification id, its header must name what is installed (e.g. "Python", "MongoDB")
  * @param {BrowserWindow} mainWindow The main window, receiving the notifications
+ * @param {Function} onStdout Optional listener of the command's stdout "data" events
  * @returns {Promise<{stdout: String, stderr: String}>} Rejects with the output of the command if it fails
  */
-export async function runInstallationStep(command, id, mainWindow) {
+export async function runInstallationStep(command, id, mainWindow, onStdout = null) {
   // pip and tar are verbose, the default 1 MB buffer would kill them before they finish
   const promise = exec(command, { maxBuffer: INSTALLATION_MAX_BUFFER })
   execCallbacksForChildWithNotifications(promise.child, id, mainWindow)
+  if (onStdout) promise.child.stdout.on("data", onStdout)
   return promise
 }
 
