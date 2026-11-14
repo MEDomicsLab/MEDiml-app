@@ -219,18 +219,8 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
     return () => clearInterval(interval)
   }, [visible, localRequirementsMet])
 
-  /**
-   * Opened because the requirements were not met (setRequirementsMet given, from the home page):
-   * closed by itself once they are, after the setup is over
-   */
-  useEffect(() => {
-    if (visible && localRequirementsMet && !clicked && typeof setRequirementsMet === "function") {
-      closeFirstSetupModal()
-    }
-  }, [visible, localRequirementsMet, clicked])
-
   return (
-    <Dialog header="Application first setup" visible={visible} onHide={onHide} style={{ width: "50vw" }} closable={closable}>
+    <Dialog header="Application first setup" visible={visible} onHide={onHide} style={{ width: "50vw" }} closable={closable && !clicked}>
       <div className="p-grid p-fluid">
         <div className="p-col-12">
           <h4>Thank you for installing the MEDiml application!</h4>
@@ -276,8 +266,9 @@ const FirstSetupModal = ({ visible, onHide, closable, setRequirementsMet }) => {
               <Button 
                 style={{ display: "flex", alignContent: "right", marginBottom: "0.5rem", width: "100px" }}
                 label="Close"
-                severity="info" 
-                onClick={closeFirstSetupModal} 
+                severity="info"
+                disabled={clicked}
+                onClick={closeFirstSetupModal}
               />
           )}
         </div>
