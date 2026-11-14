@@ -931,6 +931,7 @@ class MainInnerContainer extends React.Component<any, { layoutFile: string | nul
    */
   returnIconFromComponent(component: string, config?: any) {
     if (config !== undefined && config !== null && config !== "" && config?.path !== undefined && config?.path !== null && config?.path !== "") {
+      const extension = (config.extension ?? config.path.split(".").pop())?.toLowerCase()
       switch (extension) {
         case "csv":
           return <FileSpreadsheet style={{ marginRight: 3 }} size={16} />
